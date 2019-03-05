@@ -1,19 +1,21 @@
 {
-  "configurations": [
-    {
-      "browse": {
-        "databaseFilename": "",
-        "limitSymbolsToIncludedHeaders": true
-      },
-      "includePath": [
-        "/home/daniela/catkin_ws/devel/include",
-        "/opt/ros/melodic/include",
-        "/home/daniela/catkin_ws/src/mastersthesis/colormap/include",
-        "/home/daniela/catkin_ws/src/mastersthesis/free_space_detection/include",
-        "/home/daniela/catkin_ws/src/mastersthesis/lidar_segmentation/include",
-        "/usr/include"
-      ],
-      "name": "Linux"
-    }
-  ]
+    "configurations": [
+        {
+            "browse": {
+                "databaseFilename": "",
+                "limitSymbolsToIncludedHeaders": true
+            },
+            "includePath": [
+                "/home/daniela/catkin_ws/devel/include",
+                "/opt/ros/melodic/include",
+                "/home/daniela/catkin_ws/src/mastersthesis/colormap/include",
+                "/home/daniela/catkin_ws/src/mastersthesis/free_space_detection/include",
+                "/home/daniela/catkin_ws/src/mastersthesis/lidar_segmentation/include",
+                "/usr/include"
+            ],
+            "name": "Linux",
+            "intelliSenseMode": "gcc-x64"
+        }
+    ],
+    "version": 4
 }
