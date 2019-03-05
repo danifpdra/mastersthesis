@@ -1,0 +1,21 @@
+{
+    "configurations": [
+        {
+            "browse": {
+                "databaseFilename": "",
+                "limitSymbolsToIncludedHeaders": true
+            },
+            "includePath": [
+                "/home/daniela/catkin_ws/devel/include",
+                "/opt/ros/melodic/include",
+                "/home/daniela/catkin_ws/src/MastersThesis-atlascar2/colormap/include",
+                "/home/daniela/catkin_ws/src/MastersThesis-atlascar2/free_space_detection/include",
+                "/home/daniela/catkin_ws/src/MastersThesis-atlascar2/lidar_segmentation/include",
+                "/usr/include"
+            ],
+            "name": "Linux",
+            "intelliSenseMode": "gcc-x64"
+        }
+    ],
+    "version": 4
+}
