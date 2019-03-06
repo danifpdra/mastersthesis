@@ -111,7 +111,7 @@ find_package(cmake_modules)
 find_package(Eigen REQUIRED)
 find_package(PCL REQUIRED)
 catkin_package(
- # INCLUDE_DIRS include
+#  INCLUDE_DIRS include
 #  LIBRARIES orientation_module
 #  CATKIN_DEPENDS roscpp rospy std_msgs
 #  DEPENDS system_lib
@@ -159,6 +159,7 @@ target_link_libraries(frame_tf_broadcaster ${catkin_LIBRARIES})
 ## same as for the library above
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
+link_directories(${PCL_LIBRARY_DIRS})
 # include_directories(${PCL_INCLUDE_DIRS})
 link_directories(${PCL_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS})

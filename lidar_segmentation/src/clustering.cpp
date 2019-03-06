@@ -1,3 +1,29 @@
+/**************************************************************************************************
+ Software License Agreement (BSD License)
+
+ Copyright (c) 2011-2013, LAR toolkit developers - University of Aveiro - http://lars.mec.ua.pt
+ All rights reserved.
+
+ Redistribution and use in source and binary forms, with or without modification, are permitted
+ provided that the following conditions are met:
+
+  *Redistributions of source code must retain the above copyright notice, this list of
+   conditions and the following disclaimer.
+  *Redistributions in binary form must reproduce the above copyright notice, this list of
+   conditions and the following disclaimer in the documentation and/or other materials provided
+   with the distribution.
+  *Neither the name of the University of Aveiro nor the names of its contributors may be used to
+   endorse or promote products derived from this software without specific prior written permission.
+ 
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR
+ IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND
+ FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+ IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
+ OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+***************************************************************************************************/
 /**
 \file  clustering.cpp 
 \brief Clustering related functions.
@@ -34,7 +60,8 @@ int simpleClustering(vector<PointPtr>& points, double threshold, vector<ClusterP
 		
 // 	Add tge firts point to the cluster
 	cluster->ranges.push_back(points[0]->range);
-	cluster->support_points.push_back(points[0]);		
+	cluster->support_points.push_back(points[0]);
+	points[0]->cluster_id = idc;		
 	cluster->centroid = calculateClusterCentroid( cluster->support_points );
 	cluster->central_point = calculateClusterMedian(cluster->support_points);
 	cluster->id = idc;	
@@ -58,7 +85,8 @@ int simpleClustering(vector<PointPtr>& points, double threshold, vector<ClusterP
 			idc++;
 			
 			cluster->ranges.push_back(points[idx]->range);
-			cluster->support_points.push_back(points[idx]);			
+			cluster->support_points.push_back(points[idx]);
+			points[idx]->cluster_id = idc;			
 			cluster->centroid = calculateClusterCentroid( cluster->support_points );
 			cluster->central_point = calculateClusterMedian(cluster->support_points);
 			 
@@ -67,7 +95,8 @@ int simpleClustering(vector<PointPtr>& points, double threshold, vector<ClusterP
 		}else
 		{
 			cluster->ranges.push_back(points[idx]->range);
-			cluster->support_points.push_back(points[idx]);			
+			cluster->support_points.push_back(points[idx]);
+			points[idx]->cluster_id = idc;		
 			cluster->centroid = calculateClusterCentroid( cluster->support_points );
 			cluster->central_point = calculateClusterMedian(cluster->support_points);
 			
@@ -128,7 +157,8 @@ int dietmayerClustering( vector<PointPtr>& points, double C0 ,vector<ClusterPtr>
 	
 // 	Add tge firts point to the cluster
 	cluster_diet->ranges.push_back(points[0]->range);
-	cluster_diet->support_points.push_back(points[0]);		
+	cluster_diet->support_points.push_back(points[0]);
+	points[0]->cluster_id = idc;		
 	cluster_diet->centroid = calculateClusterCentroid(cluster_diet->support_points );
 	cluster_diet->central_point = calculateClusterMedian(cluster_diet->support_points);
 	cluster_diet->id = idc;	
@@ -164,7 +194,7 @@ int dietmayerClustering( vector<PointPtr>& points, double C0 ,vector<ClusterPtr>
 			
 			cluster_diet->ranges.push_back(points[idx]->range);
 			cluster_diet->support_points.push_back(points[idx]);
-			
+			points[idx]->cluster_id = idc;
 			cluster_diet->centroid = calculateClusterCentroid( cluster_diet->support_points );
 			cluster_diet->central_point = calculateClusterMedian(cluster_diet->support_points);
 			
@@ -174,7 +204,7 @@ int dietmayerClustering( vector<PointPtr>& points, double C0 ,vector<ClusterPtr>
 		{
 			cluster_diet->ranges.push_back(points[idx]->range);
 			cluster_diet->support_points.push_back(points[idx]);
-			
+			points[idx]->cluster_id = idc;
 			cluster_diet->centroid = calculateClusterCentroid( cluster_diet->support_points );
 			cluster_diet->central_point = calculateClusterMedian(cluster_diet->support_points);
 			
@@ -502,7 +532,7 @@ int nnClustering( vector<PointPtr>& points, double threshold , vector<ClusterPtr
 // 	fpc.close();	
 //----------------------------------------------------------------------------
 	
-	cout<<"number of clusters nearest neighbour: "<<clusters_nn.size()<<endl;
+	//cout<<"number of clusters nearest neighbour: "<<clusters_nn.size()<<endl;
 	
 	return clusters_nn.size();
 	

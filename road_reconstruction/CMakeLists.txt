@@ -100,7 +100,7 @@ find_package(PCL REQUIRED)
 
 ## Generate dynamic reconfigure parameters in the 'cfg' folder
  generate_dynamic_reconfigure_options(
-   cfg/Tutorials.cfg
+  cfg/Tutorials.cfg
 #   cfg/DynReconf2.cfg
  )
 
@@ -114,7 +114,7 @@ find_package(PCL REQUIRED)
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-  INCLUDE_DIRS #include
+  INCLUDE_DIRS include
   #LIBRARIES road_reconstruction
   # CATKIN_DEPENDS roscpp rospy std_msgs
   DEPENDS Eigen
