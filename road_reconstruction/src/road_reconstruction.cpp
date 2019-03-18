@@ -3,6 +3,7 @@
 #include <laser_assembler/AssembleScans2.h>
 #include <pcl/PCLPointCloud2.h>
 #include <pcl/common/common.h>
+#include <pcl/common/io.h>
 #include <pcl/conversions.h>
 #include <pcl/filters/conditional_removal.h>
 #include <pcl/filters/radius_outlier_removal.h>
@@ -57,7 +58,7 @@ public:
 private:
   ros::NodeHandle nh_;
   ros::Publisher pub_cloud0, pub_cloud3, pub_cloudTotal, pub_road_rec;
-  pcl::PointCloud<pcl::PointXYZ> CloudXYZ_LD0, CloudXYZ_LD1, CloudXYZ_LD2, CloudXYZ_LD3, CloudXYZ_Total;
+  pcl::PointCloud<pcl::PointXYZ> CloudXYZ_LD0, CloudXYZ_LD1, CloudXYZ_LD2, CloudXYZ_LD3, CloudXYZ_Total, acum_cloud;
   sensor_msgs::PointCloud2 CloudMsg_LD0, CloudMsg_LD3, CloudMsg_Total, Cloud_Reconst;
 
   pcl::PointCloud<pcl::PointXYZ> Inter1, Inter2, InterM, RoadRec;
@@ -68,6 +69,8 @@ private:
   // Subscriber for velocity data
   ros::Subscriber sub_getVel;
 
+
+
   // apagar-------------------
   // ros::Publisher pub_cloud_simple;
   // pcl::PointCloud<pcl::PointXYZ> CloudXYZ_Simple;
@@ -76,8 +79,22 @@ private:
 
   void getCloudsFromSensors();
   void cleanCloud();
-
   float RaioSpeed, VizSpeed;
+  int writeCount;
+  ros::Timer timer = nh_.createTimer(ros::Duration(100), &RoadReconst::accum_pcl, this, false, true);
+
+  void accum_pcl(const ros::TimerEvent &event)
+  {
+    if ((acum_cloud.points.size() != 0))
+    {
+      writeCount++;
+      char filename[100];
+      sprintf(filename, "/media/daniela/Dados/pcd_files/test_%d.pcd", writeCount);
+      pcl::io::savePCDFileASCII(filename, acum_cloud);
+      // pcl::io::savePCDFile("thisisatest.pcd", acum_cloud, true);
+      ROS_INFO("Saved %lu points in point cloud", acum_cloud.points.size());
+    }
+  }
 };
 
 void RoadReconst::getVelocity(const novatel_gps_msgs::InspvaPtr &velMsg)
@@ -103,7 +120,7 @@ void RoadReconst::getVelocity(const novatel_gps_msgs::InspvaPtr &velMsg)
   VizSpeed = std::max((float)floor(carVelocity * 125.0 / 8.0 * 3.14 * std::pow(0.2, 2)), minLimit_Viz);
 
   //---------Metodo dinamico 1 ------------------
-  // Equação deduzida pelo simulador para uma dist de acumulação de 4m para um raio de 0.2m
+  // Equaï¿½ï¿½o deduzida pelo simulador para uma dist de acumulaï¿½ï¿½o de 4m para um raio de 0.2m
   // float minLimit_Viz = 6;
   // float maxLimit_Viz = 42;
   // RaioSpeed = 0.2;
@@ -111,7 +128,7 @@ void RoadReconst::getVelocity(const novatel_gps_msgs::InspvaPtr &velMsg)
   // VizSpeed = std::min(VizSpeed, maxLimit_Viz);
 
   // ROS_INFO("Vels: %f %f %f and total %f", N_vel, E_vel, U_vel, carVelocity);
-  ROS_INFO("Car_vel %f Filt Rad %f Viz %f", carVelocity, RaioSpeed, VizSpeed);
+  // ROS_INFO("Car_vel %f Filt Rad %f Viz %f", carVelocity, RaioSpeed, VizSpeed);
 }
 
 RoadReconst::RoadReconst()
@@ -255,6 +272,17 @@ void RoadReconst::getCloudsFromSensors()
   pcl::PointXYZ minPt, maxPt;
   pcl::getMinMax3D(Inter1, minPt, maxPt);
   // ROS_INFO("Minim:%f  Maxim:%f", minPt.z, maxPt.z);
+
+  /*trying to set total cloud*/
+  if (acum_cloud.points.size() == 0)
+  {
+    acum_cloud = RoadRec;
+  }
+  else
+  {
+    acum_cloud = acum_cloud + RoadRec;
+    // ROS_INFO("Escrevi na nova cloud e o seu tamanho Ã© %lu",acum_cloud.points.size());
+  }
 }
 
 void RoadReconst::cleanCloud()
@@ -359,7 +387,7 @@ int main(int argc, char **argv)
 
 //-------wrinting to file-------------
 // std::ofstream myfile;
-// myfile.open("/home/tiago/catkin_ws_path/src/result_point.txt", std::ios::out | std::ios::app);
+// myfile.open("/home/daniela/catkin_ws/text/result_point.txt", std::ios::out | std::ios::app);
 // for (size_t i = 0; i < CloudXYZ_Simple.points.size(); i++)
 // {
 //   if (i == 41)
