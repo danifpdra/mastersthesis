@@ -44,19 +44,15 @@ private:
   pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Reconst;
   pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_inliers;
   pcl::PointCloud<pcl::PointXYZ> Cloud_check_size;
-  // sensor_msgs::PointCloud2ConstPtr Cloud_msg_in;
   sensor_msgs::PointCloud2 CloudMsg_plane;
-  ros::Publisher pub_plane;
 
+  ros::Publisher pub_plane;
   ros::Subscriber sub;
+
   void find_plane();
 
   void GetPointCloud(const sensor_msgs::PointCloud2ConstPtr& cloud_msg)
   {
-    // pcl::fromROSMsg(cloud_msg, Cloud_Reconst);
-    // Cloud_msg_in = cloud_msg;
-    // pcl::fromPCLPointCloud2(*(Cloud_msg_in), *(Cloud_Reconst));
-
     pcl::fromROSMsg(*cloud_msg.get(), *Cloud_Reconst);
   }
 };
@@ -64,14 +60,13 @@ private:
 NegObstc::NegObstc()
 {
   pub_plane = nh_.advertise<sensor_msgs::PointCloud2>("cloud_plane", 100);
+  sub = nh_.subscribe<sensor_msgs::PointCloud2>("/road_reconstruction", 1, &NegObstc::GetPointCloud, this);
   Cloud_Reconst.reset(new pcl::PointCloud<pcl::PointXYZ>);
   Cloud_inliers.reset(new pcl::PointCloud<pcl::PointXYZ>);
 }
 
 void NegObstc::loop_function()
 {
-  sub = nh_.subscribe<sensor_msgs::PointCloud2>("/road_reconstruction", 1, &NegObstc::GetPointCloud, this);
-  // ros::topic::waitForMessage("/road_reconstruction",nh_);
   Cloud_check_size = (*Cloud_Reconst);
   if (Cloud_check_size.points.size() != 0)
   {
