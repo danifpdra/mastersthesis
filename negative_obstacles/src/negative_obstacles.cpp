@@ -1,146 +1,129 @@
-#include <ros/ros.h>
-#include <laser_assembler/AssembleScans2.h>
+#include <novatel_gps_msgs/Inspva.h>
 #include <pcl/PCLPointCloud2.h>
 #include <pcl/common/common.h>
-#include <pcl/conversions.h>h>
+#include <pcl/conversions.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl_ros/point_cloud.h>
-#include <tf/transform_listener.h>
+#include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
-#include <novatel_gps_msgs/Inspva.h>
+#include <tf/transform_listener.h>
 
 //-----------------
 #include <math.h>
 #include <algorithm>  // std::max
+#include <boost/foreach.hpp>
+#include <boost/thread/thread.hpp>
 #include <cmath>
 #include <fstream>
 #include <iostream>
 //---------------------
 
-#include <pcl/sample_consensus/sac_model_plane.h>
+/* RANSAC*/
+#include <pcl/ModelCoefficients.h>
+#include <pcl/console/parse.h>
+#include <pcl/filters/extract_indices.h>
+#include <pcl/io/pcd_io.h>
+#include <pcl/sample_consensus/method_types.h>
+#include <pcl/sample_consensus/model_types.h>
+#include <pcl/segmentation/sac_segmentation.h>
+#include <pcl/visualization/pcl_visualizer.h>
 
-using namespace laser_assembler;
-// using namespace pcl;
+// typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 
-class RoadReconst
+class NegObstc
 {
 public:
-  // publicadores
-  RoadReconst();
-
-  // Filter the cloud based on recieved data
+  NegObstc();
   void loop_function();
 
 private:
   ros::NodeHandle nh_;
-  ros::Publisher pub_cloud0, pub_cloud3, pub_cloudTotal, pub_road_rec;
-  pcl::PointCloud<pcl::PointXYZ> CloudXYZ_LD0, CloudXYZ_LD1, CloudXYZ_LD2, CloudXYZ_LD3, CloudXYZ_Total;
-  sensor_msgs::PointCloud2 CloudMsg_LD0, CloudMsg_LD3, CloudMsg_Total, Cloud_Reconst;
 
-  pcl::PointCloud<pcl::PointXYZ> Inter1, Inter2, InterM, RoadRec;
+  pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Reconst;
+  pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_inliers;
+  pcl::PointCloud<pcl::PointXYZ> Cloud_check_size;
+  // sensor_msgs::PointCloud2ConstPtr Cloud_msg_in;
+  sensor_msgs::PointCloud2 CloudMsg_plane;
+  ros::Publisher pub_plane;
 
-  void getCloudsFromSensors();
+  ros::Subscriber sub;
+  void find_plane();
+
+  void GetPointCloud(const sensor_msgs::PointCloud2ConstPtr& cloud_msg)
+  {
+    // pcl::fromROSMsg(cloud_msg, Cloud_Reconst);
+    // Cloud_msg_in = cloud_msg;
+    // pcl::fromPCLPointCloud2(*(Cloud_msg_in), *(Cloud_Reconst));
+
+    pcl::fromROSMsg(*cloud_msg.get(), *Cloud_Reconst);
+  }
 };
 
-RoadReconst::RoadReconst()
+NegObstc::NegObstc()
 {
-  // Publish clouds
-  sensor_msgs::PointCloud2 CloudMsg_Simple;
-  pub_road_rec = nh_.advertise<pcl::PointCloud<pcl::PointXYZ>>("road_reconstruction", 1);
-  pub_cloudTotal = nh_.advertise<sensor_msgs::PointCloud2>("cloud_Total", 100);
-
+  pub_plane = nh_.advertise<sensor_msgs::PointCloud2>("cloud_plane", 100);
+  Cloud_Reconst.reset(new pcl::PointCloud<pcl::PointXYZ>);
+  Cloud_inliers.reset(new pcl::PointCloud<pcl::PointXYZ>);
 }
 
-void RoadReconst::loop_function()
+void NegObstc::loop_function()
 {
-  // Buscar os parametros
-
-  getCloudsFromSensors();
-  pcl::toROSMsg(CloudXYZ_Total, CloudMsg_Total);
-  pub_cloudTotal.publish(CloudMsg_Total);
+  sub = nh_.subscribe<sensor_msgs::PointCloud2>("/road_reconstruction", 1, &NegObstc::GetPointCloud, this);
+  // ros::topic::waitForMessage("/road_reconstruction",nh_);
+  Cloud_check_size = (*Cloud_Reconst);
+  if (Cloud_check_size.points.size() != 0)
+  {
+    find_plane();
+    pcl::toROSMsg(*Cloud_inliers, CloudMsg_plane);
+    pub_plane.publish(CloudMsg_plane);
+  }
 }
 
-void RoadReconst::getCloudsFromSensors()
+void NegObstc::find_plane()
 {
-  //----------Assemble_0-------------------------------------
-  ros::service::waitForService("assemble_scans0");
-  ros::ServiceClient client_0 = nh_.serviceClient<AssembleScans2>("assemble_scans0");
-  AssembleScans2 srv_0;
-  srv_0.request.begin = ros::Time(0, 0);
-  srv_0.request.end = ros::Time::now();
-  if (client_0.call(srv_0))
-  {
-    pcl::fromROSMsg(srv_0.response.cloud, CloudXYZ_LD0);
-  }
-  else
-  {
-    printf("Service call failed\n");
-  }
+  pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
+  pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
 
-  //----------Assemble_1-------------------------------------
-  ros::service::waitForService("assemble_scans1");
-  ros::ServiceClient client_1 = nh_.serviceClient<AssembleScans2>("assemble_scans1");
-  AssembleScans2 srv_1;
-  srv_1.request.begin = ros::Time(0, 0);
-  srv_1.request.end = ros::Time::now();
-  if (client_1.call(srv_1))
+  // Create the segmentation object
+  pcl::SACSegmentation<pcl::PointXYZ> seg;
+
+  // Optional
+  seg.setOptimizeCoefficients(true);
+
+  // Mandatory
+  seg.setModelType(pcl::SACMODEL_PLANE);
+  seg.setMethodType(pcl::SAC_RANSAC);
+  seg.setDistanceThreshold(0.01);
+
+  seg.setInputCloud(Cloud_Reconst);
+  seg.segment(*inliers, *coefficients);
+
+  if (inliers->indices.size() == 0)
   {
-    pcl::fromROSMsg(srv_1.response.cloud, CloudXYZ_LD1);
-  }
-  else
-  {
-    printf("Service call failed\n");
+    PCL_ERROR("Could not estimate a planar model for the given dataset.");
+    // return (-1);
   }
 
-  //----------Assemble_2-------------------------------------
+  // std::cerr << "Model coefficients: " << coefficients->values[0] << " " << coefficients->values[1] << " "
+  //           << coefficients->values[2] << " " << coefficients->values[3] << std::endl;
 
-  ros::service::waitForService("assemble_scans2_");
-  ros::ServiceClient client_2 = nh_.serviceClient<AssembleScans2>("assemble_scans2_");
-  AssembleScans2 srv_2;
-  srv_2.request.begin = ros::Time(0, 0);
-  srv_2.request.end = ros::Time::now();
-  if (client_2.call(srv_2))
-  {
-    pcl::fromROSMsg(srv_2.response.cloud, CloudXYZ_LD2);
-  }
-  else
-  {
-    printf("Service call failed\n");
-  }
+  // std::cerr << "Model inliers: " << inliers->indices.size() << std::endl;
+  // for (size_t i = 0; i < inliers->indices.size(); ++i)
+  //   std::cerr << inliers->indices[i] << "    " << Cloud_Reconst->points[inliers->indices[i]].x << " "
+  //             << Cloud_Reconst->points[inliers->indices[i]].y << " " << Cloud_Reconst->points[inliers->indices[i]].z
+  //             << std::endl;
 
-  //----------Assemble_3-------------------------------------
-  ros::service::waitForService("assemble_scans3");
-  ros::ServiceClient client_3 = nh_.serviceClient<AssembleScans2>("assemble_scans3");
-  AssembleScans2 srv_3;
-  srv_3.request.begin = ros::Time(0, 0);
-  srv_3.request.end = ros::Time::now();
-  if (client_3.call(srv_3))
-  {
-    pcl::fromROSMsg(srv_3.response.cloud, CloudXYZ_LD3);
-  }
-  else
-    printf("Service call failed\n");
-
-  //------------------Assemble all an publish---------------
-
-  Inter1 = CloudXYZ_LD0 + CloudXYZ_LD1;  // 1-2 | first 2
-  Inter2 = CloudXYZ_LD2 + CloudXYZ_LD3;  // 3-4 | last 2
-  InterM = Inter1 + CloudXYZ_LD2;  // first 3 clouds
-  RoadRec = Inter1 + Inter2;       // all clouds
-  pcl::toROSMsg(InterM, Cloud_Reconst);
-  pub_road_rec.publish(Cloud_Reconst);
-
+  // copies all inliers of the model computed to another PointCloud
+  pcl::copyPointCloud<pcl::PointXYZ>(*Cloud_Reconst, inliers->indices, *Cloud_inliers);
+  ROS_WARN("Finding ransac planes");
 }
 
-
-pcl::SampleConsensusModelPlane< PointT >::SampleConsensusModelPlane
-
-int main(int argc, char **argv)
+int main(int argc, char** argv)
 {
-  ros::init(argc, argv, "RoadReconst");
-  RoadReconst reconstruct;
+  ros::init(argc, argv, "NegObstc");
+  NegObstc reconstruct;
 
   ros::Rate rate(50);
   while (ros::ok())
