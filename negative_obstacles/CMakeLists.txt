@@ -149,7 +149,7 @@ include_directories(
 add_executable(negative_obstacles src/negative_obstacles.cpp)
 #add_executable(assem src/assemble.cpp)
 # add_executable()
-add_dependencies(negative_obstacles ${PROJECT_NAME}_gencfg)
+#add_dependencies(negative_obstacles ${PROJECT_NAME}_gencfg)
 
 target_link_libraries(negative_obstacles ${catkin_LIBRARIES} ${PCL_LIBRARIES})
 #target_link_libraries(assem ${catkin_LIBRARIES} ${PCL_LIBRARIES})
