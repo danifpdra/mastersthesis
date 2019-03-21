@@ -12,7 +12,7 @@
 
 //-----------------
 #include <math.h>
-#include <algorithm> // std::max
+#include <algorithm>  // std::max
 #include <boost/foreach.hpp>
 #include <boost/thread/thread.hpp>
 #include <cmath>
@@ -43,15 +43,12 @@
 #include "geometry_msgs/Pose.h"
 #include "shape_msgs/SolidPrimitive.h"
 
-/*octomap*/
-#include <octomap_msgs/GetOctomap.h>
-#include <octomap_msgs/Octomap.h>
-#include <octomap_msgs/conversions.h>
-#include <octomap_ros/conversions.h>
-#include <pcl/octree/octree_search.h>
-#include <pcl/point_cloud.h>
-
-// typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
+// /*octomap*/
+// #include <octomap_msgs/GetOctomap.h>
+// #include <octomap_msgs/Octomap.h>
+// #include <octomap_msgs/conversions.h>
+// #include <octomap_ros/conversions.h>
+// #include <pcl/octree/octree_search.h>
 
 class NegObstc
 {
@@ -64,35 +61,38 @@ private:
 
   /*pcl*/
   pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Reconst, Cropped_cloud;
-  pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_inliers, Cloud_negative;
-  pcl::PointCloud<pcl::PointXYZ> Cloud_check_size, Cloud_check_sqr;
-  // pcl::PointCloud<pcl::PointXYZ>::Ptr extract_out;
-  // pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_in_color, cloud_out_color;
-  pcl::PointXYZ minPt, maxPt, minR, maxR;
-  pcl::SACSegmentation<pcl::PointXYZ> seg; // Create the segmentation object
+  pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_inliers;
+  pcl::PointCloud<pcl::PointXYZ> Cloud_check_size, Cloud_check_sqr, Cloud_negative;
+  pcl::PointXYZ minPt, maxPt, minR, maxR, randPt;
+  pcl::SACSegmentation<pcl::PointXYZ> seg;  // Create the segmentation object
   pcl::ModelCoefficients::Ptr coefficients;
   pcl::PointIndices::Ptr inliers;
   pcl::CropBox<pcl::PointXYZ> boxFilter;
   // pcl::octree::OctreePointCloudSearch<pcl::PointXYZ> octree_reconst;
+  // pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_in_color, cloud_out_color;
+
   /*others*/
-  double h,pace;
+  float h_plane, pace, Xmin, Ymin, Zmin, Xmax, Ymax, Zmax;
   size_t count_points;
   // Eigen::Vector3f min_pt, max_pt;
 
   /*publishers and subscribers*/
   ros::Publisher pub_plane;
+  ros::Publisher pub_negative;
   ros::Subscriber sub;
   ros::Publisher marker_pub;
   // ros::Publisher octomap_publisher;
+
   /*messages*/
   visualization_msgs::Marker plane_marker;
   sensor_msgs::PointCloud2 CloudMsg_plane;
+  sensor_msgs::PointCloud2 CloudMsg_negative;
   shape_msgs::SolidPrimitive shape;
   geometry_msgs::Pose pose;
   // octomap_msgs::Octomap octree_msg;
 
   void find_plane();
-  void octree_builder();
+  void spatial_segmentation();
 
   void GetPointCloud(const sensor_msgs::PointCloud2ConstPtr &cloud_msg)
   {
@@ -108,18 +108,25 @@ NegObstc::NegObstc()
 {
   /*publishers and subscribers*/
   pub_plane = nh_.advertise<sensor_msgs::PointCloud2>("cloud_plane", 100);
+  pub_negative = nh_.advertise<sensor_msgs::PointCloud2>("cloud_negative", 100);
   marker_pub = nh_.advertise<visualization_msgs::Marker>("plane_marker", 1, true);
   sub = nh_.subscribe<sensor_msgs::PointCloud2>("/road_reconstruction", 1, &NegObstc::GetPointCloud, this);
   // octomap_publisher = nh_.advertise<octomap_msgs::Octomap>("octree_reconst", 1);
+
   /*initialize pointers*/
   Cloud_Reconst.reset(new pcl::PointCloud<pcl::PointXYZ>);
   Cloud_inliers.reset(new pcl::PointCloud<pcl::PointXYZ>);
+  Cropped_cloud.reset(new pcl::PointCloud<pcl::PointXYZ>);
   coefficients.reset(new pcl::ModelCoefficients);
   inliers.reset(new pcl::PointIndices);
-  cloud_in_color.reset(new pcl::PointCloud<pcl::PointXYZRGB>);
-  cloud_out_color.reset(new pcl::PointCloud<pcl::PointXYZRGB>);
+  // cloud_in_color.reset(new pcl::PointCloud<pcl::PointXYZRGB>);
+  // cloud_out_color.reset(new pcl::PointCloud<pcl::PointXYZRGB>);
 }
 
+/**
+ * @brief Loop function to calculate negative obstacles
+ * 
+ */
 void NegObstc::loop_function()
 {
   Cloud_check_size = (*Cloud_Reconst);
@@ -129,6 +136,9 @@ void NegObstc::loop_function()
     pcl::toROSMsg(*Cloud_inliers, CloudMsg_plane);
     pub_plane.publish(CloudMsg_plane);
     marker_pub.publish(plane_marker);
+    spatial_segmentation();
+    pcl::toROSMsg(Cloud_negative, CloudMsg_negative);
+    pub_negative.publish(CloudMsg_negative);
   }
 }
 
@@ -157,28 +167,30 @@ void NegObstc::find_plane()
   // copies all inliers of the model computed to another PointCloud
   pcl::copyPointCloud<pcl::PointXYZ>(*Cloud_Reconst, inliers->indices, *Cloud_inliers);
   pcl::getMinMax3D(*Cloud_inliers, minPt, maxPt);
-  h = minPt.z + (maxPt.z - minPt.z) / 2;
+  h_plane = minPt.z + (maxPt.z - minPt.z) / 2;
   // ROS_WARN("Finding ransac planes");
   // pcl::copyPointCloud(*Cloud_inliers, *cloud_in_color);
   // simple_grasping::extractUnorientedBoundingBox(*cloud_in_color,shape,pose);
   // simple_grasping::extractShape(*cloud_in_color, *cloud_out_color, shape, plane_marker.pose);
-  // h = simple_grasping::distancePointToPlane(origin_pt, coefficients);
+  // h_plane= simple_grasping::distancePointToPlane(origin_pt, coefficients);
 
   plane_marker.ns = "plane";
   plane_marker.header.frame_id = "ground";
   plane_marker.type = visualization_msgs::Marker::CUBE;
   plane_marker.pose.position.x = 10;
   // plane_marker.pose.position.y = (maxPt.y - minPt.y) / 2;
-  plane_marker.pose.position.z = h;
+  plane_marker.pose.position.z = h_plane;
   plane_marker.pose.orientation.w = 1;
-  plane_marker.scale.x = 20;   // shape.dimensions[0];
-  plane_marker.scale.y = 20;   // shape.dimensions[1];
-  plane_marker.scale.z = 0.01; // shape.dimensions[2];
+  plane_marker.scale.x = 20;    // shape.dimensions[0];
+  plane_marker.scale.y = 20;    // shape.dimensions[1];
+  plane_marker.scale.z = 0.01;  // shape.dimensions[2];
   plane_marker.color.r = 1;
-  plane_marker.color.a = 0.8;
+  plane_marker.color.g = 0.0;
+  plane_marker.color.b = 0.0;
+  plane_marker.color.a = 0.9;
 }
 
-void NegObstc::octree_builder()
+void NegObstc::spatial_segmentation()
 {
   // float voxelSize = 0.01f;  // voxel resolution
   // pcl::octree::OctreePointCloud<pcl::PointXYZ> octree(voxelSize);
@@ -198,18 +210,33 @@ void NegObstc::octree_builder()
 
   /* TENTATIVA DE DIVISÃO ESPACIAL*/
   pcl::getMinMax3D(*Cloud_Reconst, minR, maxR);
-  pace=(maxR.y - minR.y) / 100;
-  for (int Y = minR.y; Y <= maxR.y-pace; Y = Y + pace)
+  pace = (maxR.y - minR.y) / 20;  // adjust pace
+  for (int Y = minR.y; Y <= maxR.y - pace; Y = Y + pace)
   {
-    boxFilter.setMin(Eigen::Vector4f(minR.x, Y, h, 1.0));
-    boxFilter.setMax(Eigen::Vector4f(minR.x + 10, Y+pace, h + 10, 1.0));
+    Cropped_cloud.reset(new pcl::PointCloud<pcl::PointXYZ>);
+    Xmin = minR.x;
+    Xmax = minR.x + 10;
+    Ymin = Y;
+    Ymax = Y + pace;
+    Zmin = h_plane;
+    Zmax = h_plane + 10;
+    boxFilter.setMin(Eigen::Vector4f(Xmin, Ymin, Zmin, 1.0));
+    boxFilter.setMax(Eigen::Vector4f(Xmax, Ymax, Zmax, 1.0));
     boxFilter.setInputCloud(Cloud_Reconst);
     boxFilter.filter(*Cropped_cloud);
     Cloud_check_sqr = (*Cropped_cloud);
     count_points = Cloud_check_sqr.points.size();
-    ROS_WARN("Number of points in square: %d", count_points);
-    if ()
+    ROS_WARN("Number of points in square: %lu", count_points);
+    if (count_points < 3)  // adapt number
     {
+      for (int i = 0; i < 20; i++)
+      {
+        srand(time(NULL));
+        randPt.x = static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / (Xmax - Xmin))) + Xmin;
+        randPt.y = static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / (Ymax - Ymin))) + Ymin;
+        randPt.z = static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / (Zmax - Zmin))) + Zmin;
+        Cloud_negative.push_back(randPt);
+      }
     }
   }
 }
