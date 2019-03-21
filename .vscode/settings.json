@@ -8,6 +8,8 @@
         "*.tcc": "cpp",
         "istream": "cpp",
         "tuple": "cpp",
-        "utility": "cpp"
+        "utility": "cpp",
+        "core": "cpp",
+        "numericaldiff": "cpp"
     }
 }

@@ -81,7 +81,7 @@ private:
   void cleanCloud();
   float RaioSpeed, VizSpeed;
   int writeCount;
-  ros::Timer timer = nh_.createTimer(ros::Duration(100), &RoadReconst::accum_pcl, this, false, true);
+  ros::Timer timer = nh_.createTimer(ros::Duration(200), &RoadReconst::accum_pcl, this, false, true);
 
   void accum_pcl(const ros::TimerEvent &event)
   {
@@ -364,6 +364,7 @@ void RoadReconst::cleanCloud()
     //   // sor.setNegative(true);
     //   sor.filter(*cloud_filteredStat);
     // }
+    
   }
 
   CloudXYZ_Total = *cloud_filteredRad;
