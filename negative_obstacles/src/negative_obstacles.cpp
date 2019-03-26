@@ -62,7 +62,7 @@ private:
   /*pcl*/
   pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Reconst, Cropped_cloud;
   pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_inliers;
-  pcl::PointCloud<pcl::PointXYZ> Cloud_check_size, Cloud_check_sqr, Cloud_negative;
+  pcl::PointCloud<pcl::PointXYZ> Cloud_check_size, Cloud_check_sqr, Cloud_negative, Cloud_inliers_to_save;
   pcl::PointXYZ minPt, maxPt, minR, maxR, randPt;
   pcl::SACSegmentation<pcl::PointXYZ> seg;  // Create the segmentation object
   pcl::ModelCoefficients::Ptr coefficients;
@@ -72,8 +72,9 @@ private:
   // pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_in_color, cloud_out_color;
 
   /*others*/
-  float h_plane, pace, Xmin, Ymin, Zmin, Xmax, Ymax, Zmax;
+  float h_plane, pace, X_min, Y_min, Z_min, X_max, Y_max, Z_max;
   size_t count_points;
+  int N, i, writeCount;
   // Eigen::Vector3f min_pt, max_pt;
 
   /*publishers and subscribers*/
@@ -81,10 +82,14 @@ private:
   ros::Publisher pub_negative;
   ros::Subscriber sub;
   ros::Publisher marker_pub;
+  ros::Publisher marker_pub_cubelist;
+  tf::StampedTransform transform;
+  tf::TransformListener listener;
   // ros::Publisher octomap_publisher;
 
   /*messages*/
   visualization_msgs::Marker plane_marker;
+  visualization_msgs::Marker cubelist_marker;
   sensor_msgs::PointCloud2 CloudMsg_plane;
   sensor_msgs::PointCloud2 CloudMsg_negative;
   shape_msgs::SolidPrimitive shape;
@@ -98,6 +103,21 @@ private:
   {
     pcl::fromROSMsg(*cloud_msg.get(), *Cloud_Reconst);
   }
+
+  ros::Timer timer = nh_.createTimer(ros::Duration(50), &NegObstc::accum_pcl, this, false, true);
+
+  void accum_pcl(const ros::TimerEvent &event)
+  {
+    if ((Cloud_inliers_to_save.points.size() != 0))
+    {
+      writeCount++;
+      char filename[100];
+      sprintf(filename, "/media/daniela/Dados/pcd_files/planefittingcloud_%d.pcd", writeCount);
+      // pcl::io::savePCDFileASCII(filename, Cloud_inliers_to_save);
+      // pcl::io::savePCDFile("thisisatest.pcd", acum_cloud, true);
+      ROS_INFO("Saved %lu points in point cloud", Cloud_inliers_to_save.points.size());
+    }
+  }
 };
 
 /**
@@ -110,7 +130,9 @@ NegObstc::NegObstc()
   pub_plane = nh_.advertise<sensor_msgs::PointCloud2>("cloud_plane", 100);
   pub_negative = nh_.advertise<sensor_msgs::PointCloud2>("cloud_negative", 100);
   marker_pub = nh_.advertise<visualization_msgs::Marker>("plane_marker", 1, true);
+  marker_pub_cubelist = nh_.advertise<visualization_msgs::Marker>("cubelist_marker", 1, true);
   sub = nh_.subscribe<sensor_msgs::PointCloud2>("/road_reconstruction", 1, &NegObstc::GetPointCloud, this);
+  // listener.lookupTransform("/ground", "/world", ros::Time(0), transform);
   // octomap_publisher = nh_.advertise<octomap_msgs::Octomap>("octree_reconst", 1);
 
   /*initialize pointers*/
@@ -125,7 +147,7 @@ NegObstc::NegObstc()
 
 /**
  * @brief Loop function to calculate negative obstacles
- * 
+ *
  */
 void NegObstc::loop_function()
 {
@@ -137,8 +159,9 @@ void NegObstc::loop_function()
     pub_plane.publish(CloudMsg_plane);
     marker_pub.publish(plane_marker);
     spatial_segmentation();
-    pcl::toROSMsg(Cloud_negative, CloudMsg_negative);
-    pub_negative.publish(CloudMsg_negative);
+    marker_pub_cubelist.publish(cubelist_marker);
+    // pcl::toROSMsg(Cloud_negative, CloudMsg_negative);
+    // pub_negative.publish(CloudMsg_negative);
   }
 }
 
@@ -154,20 +177,28 @@ void NegObstc::find_plane()
   // Mandatory
   seg.setModelType(pcl::SACMODEL_PLANE);
   seg.setMethodType(pcl::SAC_RANSAC);
-  seg.setDistanceThreshold(0.01);
+  seg.setDistanceThreshold(0.3);
+  seg.setMaxIterations(1000);
 
   seg.setInputCloud(Cloud_Reconst);
   seg.segment(*inliers, *coefficients);
+
+  // pcl::computeMeanAndCovarianceMatrix(),
 
   if (inliers->indices.size() == 0)
   {
     PCL_ERROR("Could not estimate a planar model for the given dataset.");
   }
 
+  std::cerr << "Model coefficients: " << coefficients->values[0] << " " << coefficients->values[1] << " "
+            << coefficients->values[2] << " " << coefficients->values[3] << std::endl;
+
   // copies all inliers of the model computed to another PointCloud
   pcl::copyPointCloud<pcl::PointXYZ>(*Cloud_Reconst, inliers->indices, *Cloud_inliers);
   pcl::getMinMax3D(*Cloud_inliers, minPt, maxPt);
   h_plane = minPt.z + (maxPt.z - minPt.z) / 2;
+  // h_plane = std::abs(coefficients->values[3] / sqrt(pow(coefficients->values[0], 2) + pow(coefficients->values[1], 2)
+  // + pow(coefficients->values[2], 2)));
   // ROS_WARN("Finding ransac planes");
   // pcl::copyPointCloud(*Cloud_inliers, *cloud_in_color);
   // simple_grasping::extractUnorientedBoundingBox(*cloud_in_color,shape,pose);
@@ -180,63 +211,131 @@ void NegObstc::find_plane()
   plane_marker.pose.position.x = 10;
   // plane_marker.pose.position.y = (maxPt.y - minPt.y) / 2;
   plane_marker.pose.position.z = h_plane;
+  plane_marker.pose.orientation.x = M_PI / 2 - atan2(coefficients->values[2], coefficients->values[1]);
+  plane_marker.pose.orientation.y = M_PI / 2 - atan2(coefficients->values[2], coefficients->values[0]);
   plane_marker.pose.orientation.w = 1;
   plane_marker.scale.x = 20;    // shape.dimensions[0];
   plane_marker.scale.y = 20;    // shape.dimensions[1];
   plane_marker.scale.z = 0.01;  // shape.dimensions[2];
-  plane_marker.color.r = 1;
-  plane_marker.color.g = 0.0;
-  plane_marker.color.b = 0.0;
-  plane_marker.color.a = 0.9;
+  plane_marker.color.r = 1.0;
+  plane_marker.color.a = 0.8;
+
+  /*trying to set total cloud*/
+  if (Cloud_inliers_to_save.points.size() == 0)
+  {
+    Cloud_inliers_to_save = *Cloud_inliers;
+  }
+  else
+  {
+    Cloud_inliers_to_save = Cloud_inliers_to_save + *Cloud_inliers;
+    // ROS_INFO("Escrevi na nova cloud e o seu tamanho é %lu",acum_cloud.points.size());
+  }
 }
 
 void NegObstc::spatial_segmentation()
 {
-  // float voxelSize = 0.01f;  // voxel resolution
-  // pcl::octree::OctreePointCloud<pcl::PointXYZ> octree(voxelSize);
-  // octree.setInputCloud(Cloud_Reconst);
-  // octree.addPointsFromInputCloud();
-  // octree.getBoundingBox();
-  // getVoxelBounds(octree, min_pt, max_pt);
+  N = 30 * 5;
+  i = 0;
+  cubelist_marker.ns = "cubelist";
+  cubelist_marker.header.frame_id = "ground";
+  cubelist_marker.type = visualization_msgs::Marker::CUBE_LIST;
+  cubelist_marker.points.resize(N);
+  cubelist_marker.colors.resize(N);
+  cubelist_marker.scale.x = 1;  // shape.dimensions[0];
+  cubelist_marker.scale.y = 1;  // shape.dimensions[1];
+  cubelist_marker.scale.z = 1;
 
-  // // octomap_msgs::binaryMapToMsg(octree, octree_msg);
-  // // octomap_publisher.publish(octree_msg);
-
-  // pcl::VoxelGrid<pcl::PointXYZ> vg;
-  // pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filteredVox(new pcl::PointCloud<pcl::PointXYZ>);
-  // vg.setInputCloud(Cloud_Reconst);
-  // vg.setLeafSize(0.06f, 0.06f, 0.06f);
-  // vg.filter(*cloud_filteredVox);
+  try
+  {
+    listener.waitForTransform("map", "ground", ros::Time(0), ros::Duration(1.0));
+    listener.lookupTransform("map", "ground", ros::Time(0), transform);
+  }
+  catch (tf::TransformException &ex)
+  {
+    ROS_ERROR("%s", ex.what());
+  }
 
   /* TENTATIVA DE DIVISÃO ESPACIAL*/
   pcl::getMinMax3D(*Cloud_Reconst, minR, maxR);
-  pace = (maxR.y - minR.y) / 20;  // adjust pace
-  for (int Y = minR.y; Y <= maxR.y - pace; Y = Y + pace)
+  // pace = (maxR.y - minR.y) / 20;  // adjust pace
+  pace = 1;
+  for (int n_linhas = 0; n_linhas < 5; n_linhas++)
   {
-    Cropped_cloud.reset(new pcl::PointCloud<pcl::PointXYZ>);
-    Xmin = minR.x;
-    Xmax = minR.x + 10;
-    Ymin = Y;
-    Ymax = Y + pace;
-    Zmin = h_plane;
-    Zmax = h_plane + 10;
-    boxFilter.setMin(Eigen::Vector4f(Xmin, Ymin, Zmin, 1.0));
-    boxFilter.setMax(Eigen::Vector4f(Xmax, Ymax, Zmax, 1.0));
-    boxFilter.setInputCloud(Cloud_Reconst);
-    boxFilter.filter(*Cropped_cloud);
-    Cloud_check_sqr = (*Cropped_cloud);
-    count_points = Cloud_check_sqr.points.size();
-    ROS_WARN("Number of points in square: %lu", count_points);
-    if (count_points < 3)  // adapt number
+    for (int Y = -15; Y <= 15 - pace; Y = Y + pace)
     {
-      for (int i = 0; i < 20; i++)
+      Cropped_cloud.reset(new pcl::PointCloud<pcl::PointXYZ>);
+      X_min = n_linhas;  // X_min = transform.getOrigin().x() + n_linhas;
+      X_max = X_min + 1 + n_linhas;
+      Y_min = Y;
+      Y_max = Y + pace;
+      Z_min = h_plane - 50;
+      Z_max = h_plane + 50;
+
+      // boxFilter(true);
+      boxFilter.setTranslation(Eigen::Vector3f(transform.getOrigin().x(),transform.getOrigin().y(),transform.getOrigin().z()));
+      boxFilter.setRotation(Eigen::Vector3f(transform.getRotation().x(),transform.getRotation().y(),transform.getRotation().z()));
+      boxFilter.setMin(Eigen::Vector4f(X_min, Y_min, Z_min, 1.0));
+      boxFilter.setMax(Eigen::Vector4f(X_max, Y_max, Z_max, 1.0));
+      boxFilter.setInputCloud(Cloud_Reconst);
+      boxFilter.filter(*Cropped_cloud);
+      Cloud_check_sqr = (*Cropped_cloud);
+      count_points = Cloud_check_sqr.points.size();
+      ROS_WARN("Number of points in square: %lu", count_points);
+
+      // if (count_points < 3)  // adjust number
+      // {
+      //   for (int i = 0; i < 20; i++) /*put 20 random points within empty cuboids*/
+      //   {
+      //     srand(time(NULL));
+      //     randPt.x = static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / (X_max - X_min))) + X_min;
+      //     randPt.y = static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / (Y_max - Y_min))) + Y_min;
+      //     randPt.z = static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / (Z_max - Z_min))) + Z_min;
+      //     Cloud_negative.push_back(randPt);
+      //   }
+      // }
+
+      cubelist_marker.points[i].x = 0 + n_linhas;
+      cubelist_marker.points[i].y = Y + pace / 2;
+      cubelist_marker.points[i].z = h_plane + 0.5;
+      cubelist_marker.colors[i].b = 0;
+      cubelist_marker.colors[i].a = 0.5;
+
+      if (count_points > 100)
       {
-        srand(time(NULL));
-        randPt.x = static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / (Xmax - Xmin))) + Xmin;
-        randPt.y = static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / (Ymax - Ymin))) + Ymin;
-        randPt.z = static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / (Zmax - Zmin))) + Zmin;
-        Cloud_negative.push_back(randPt);
+        cubelist_marker.colors[i].r = 0.0;
+        cubelist_marker.colors[i].g = 1.0;
       }
+      else if (count_points >= 75 && count_points < 100)
+      {
+        cubelist_marker.colors[i].r = 0.29;
+        cubelist_marker.colors[i].g = 1.0;
+      }
+      else if (count_points >= 50 && count_points < 75)
+      {
+        cubelist_marker.colors[i].r = 0.58;
+        cubelist_marker.colors[i].g = 1.0;
+      }
+      else if (count_points >= 25 && count_points < 50)
+      {
+        cubelist_marker.colors[i].r = 0.90;
+        cubelist_marker.colors[i].g = 1.0;
+      }
+      else if (count_points >= 10 && count_points < 25)
+      {
+        cubelist_marker.colors[i].r = 1.0;
+        cubelist_marker.colors[i].g = 0.80;
+      }
+      else if (count_points >= 5 && count_points < 10)
+      {
+        cubelist_marker.colors[i].r = 1.0;
+        cubelist_marker.colors[i].g = 0.5;
+      }
+      else
+      {
+        cubelist_marker.colors[i].r = 1.0;
+        cubelist_marker.colors[i].g = 0.0;
+      }
+      i++;
     }
   }
 }

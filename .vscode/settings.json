@@ -10,6 +10,8 @@
         "tuple": "cpp",
         "utility": "cpp",
         "core": "cpp",
-        "numericaldiff": "cpp"
+        "numericaldiff": "cpp",
+        "chrono": "cpp",
+        "cmath": "cpp"
     }
 }
