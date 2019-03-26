@@ -6,6 +6,7 @@
 #include <pcl/point_types.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl_ros/point_cloud.h>
+#include <pcl_ros/transforms.h>
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <tf/transform_listener.h>
@@ -24,6 +25,7 @@
 
 /* RANSAC*/
 #include <pcl/ModelCoefficients.h>
+#include <pcl/common/transforms.h>
 #include <pcl/console/parse.h>
 #include <pcl/filters/crop_box.h>
 #include <pcl/filters/extract_indices.h>
@@ -61,7 +63,7 @@ private:
 
   /*pcl*/
   pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Reconst, Cropped_cloud;
-  pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_inliers;
+  pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_inliers, Transformed_cloud;
   pcl::PointCloud<pcl::PointXYZ> Cloud_check_size, Cloud_check_sqr, Cloud_negative, Cloud_inliers_to_save;
   pcl::PointXYZ minPt, maxPt, minR, maxR, randPt;
   pcl::SACSegmentation<pcl::PointXYZ> seg;  // Create the segmentation object
@@ -139,6 +141,7 @@ NegObstc::NegObstc()
   Cloud_Reconst.reset(new pcl::PointCloud<pcl::PointXYZ>);
   Cloud_inliers.reset(new pcl::PointCloud<pcl::PointXYZ>);
   Cropped_cloud.reset(new pcl::PointCloud<pcl::PointXYZ>);
+  Transformed_cloud.reset(new pcl::PointCloud<pcl::PointXYZ>());
   coefficients.reset(new pcl::ModelCoefficients);
   inliers.reset(new pcl::PointIndices);
   // cloud_in_color.reset(new pcl::PointCloud<pcl::PointXYZRGB>);
@@ -190,8 +193,8 @@ void NegObstc::find_plane()
     PCL_ERROR("Could not estimate a planar model for the given dataset.");
   }
 
-  std::cerr << "Model coefficients: " << coefficients->values[0] << " " << coefficients->values[1] << " "
-            << coefficients->values[2] << " " << coefficients->values[3] << std::endl;
+  // std::cerr << "Model coefficients: " << coefficients->values[0] << " " << coefficients->values[1] << " "
+  //           << coefficients->values[2] << " " << coefficients->values[3] << std::endl;
 
   // copies all inliers of the model computed to another PointCloud
   pcl::copyPointCloud<pcl::PointXYZ>(*Cloud_Reconst, inliers->indices, *Cloud_inliers);
@@ -234,7 +237,7 @@ void NegObstc::find_plane()
 
 void NegObstc::spatial_segmentation()
 {
-  N = 30 * 5;
+  N = 40 * 10;
   i = 0;
   cubelist_marker.ns = "cubelist";
   cubelist_marker.header.frame_id = "ground";
@@ -245,38 +248,30 @@ void NegObstc::spatial_segmentation()
   cubelist_marker.scale.y = 1;  // shape.dimensions[1];
   cubelist_marker.scale.z = 1;
 
-  try
-  {
-    listener.waitForTransform("map", "ground", ros::Time(0), ros::Duration(1.0));
-    listener.lookupTransform("map", "ground", ros::Time(0), transform);
-  }
-  catch (tf::TransformException &ex)
-  {
-    ROS_ERROR("%s", ex.what());
-  }
-
   /* TENTATIVA DE DIVISÃO ESPACIAL*/
   pcl::getMinMax3D(*Cloud_Reconst, minR, maxR);
   // pace = (maxR.y - minR.y) / 20;  // adjust pace
   pace = 1;
-  for (int n_linhas = 0; n_linhas < 5; n_linhas++)
+  for (int n_linhas = 0; n_linhas < 10; n_linhas++)
   {
-    for (int Y = -15; Y <= 15 - pace; Y = Y + pace)
+    for (int Y = -20; Y <= 20 - pace; Y = Y + pace)
     {
       Cropped_cloud.reset(new pcl::PointCloud<pcl::PointXYZ>);
       X_min = n_linhas;  // X_min = transform.getOrigin().x() + n_linhas;
-      X_max = X_min + 1 + n_linhas;
+      X_max = X_min + 1;
       Y_min = Y;
       Y_max = Y + pace;
       Z_min = h_plane - 50;
       Z_max = h_plane + 50;
 
-      // boxFilter(true);
-      boxFilter.setTranslation(Eigen::Vector3f(transform.getOrigin().x(),transform.getOrigin().y(),transform.getOrigin().z()));
-      boxFilter.setRotation(Eigen::Vector3f(transform.getRotation().x(),transform.getRotation().y(),transform.getRotation().z()));
+      pcl_ros::transformPointCloud("ground", ros::Time(0), *Cloud_Reconst, "map", *Transformed_cloud, NegObstc::listener);
       boxFilter.setMin(Eigen::Vector4f(X_min, Y_min, Z_min, 1.0));
       boxFilter.setMax(Eigen::Vector4f(X_max, Y_max, Z_max, 1.0));
-      boxFilter.setInputCloud(Cloud_Reconst);
+      // boxFilter.setTranslation(
+      //     Eigen::Vector3f(transform.getOrigin().x(), transform.getOrigin().y(), transform.getOrigin().z()));
+      // boxFilter.setRotation(
+      //     Eigen::Vector3f(transform.getRotation().x(), transform.getRotation().y(), transform.getRotation().z()));
+      boxFilter.setInputCloud(Transformed_cloud);
       boxFilter.filter(*Cropped_cloud);
       Cloud_check_sqr = (*Cropped_cloud);
       count_points = Cloud_check_sqr.points.size();
@@ -294,7 +289,7 @@ void NegObstc::spatial_segmentation()
       //   }
       // }
 
-      cubelist_marker.points[i].x = 0 + n_linhas;
+      cubelist_marker.points[i].x = n_linhas + 0.5;
       cubelist_marker.points[i].y = Y + pace / 2;
       cubelist_marker.points[i].z = h_plane + 0.5;
       cubelist_marker.colors[i].b = 0;
