@@ -52,6 +52,12 @@
 // #include <octomap_ros/conversions.h>
 // #include <pcl/octree/octree_search.h>
 
+struct gradient_2d
+{
+  int vertical;
+  int horizontal;
+};
+
 class NegObstc
 {
 public:
@@ -76,7 +82,7 @@ private:
   /*others*/
   float h_plane, pace, X_min, Y_min, Z_min, X_max, Y_max, Z_max;
   size_t count_points;
-  int N, i, writeCount;
+  int N, i, writeCount, lin, col, nc, nl;
   // Eigen::Vector3f min_pt, max_pt;
 
   /*publishers and subscribers*/
@@ -85,6 +91,7 @@ private:
   ros::Subscriber sub;
   ros::Publisher marker_pub;
   ros::Publisher marker_pub_cubelist;
+  ros::Publisher marker_pub_gradient, marker_pub_grad_x, marker_pub_grad_y, marker_pub_grad_direction;
   tf::StampedTransform transform;
   tf::TransformListener listener;
   // ros::Publisher octomap_publisher;
@@ -92,6 +99,7 @@ private:
   /*messages*/
   visualization_msgs::Marker plane_marker;
   visualization_msgs::Marker cubelist_marker;
+  visualization_msgs::Marker gradient_marker, grad_x_marker, grad_y_marker, grad_direction_marker;
   sensor_msgs::PointCloud2 CloudMsg_plane;
   sensor_msgs::PointCloud2 CloudMsg_negative;
   shape_msgs::SolidPrimitive shape;
@@ -133,6 +141,10 @@ NegObstc::NegObstc()
   pub_negative = nh_.advertise<sensor_msgs::PointCloud2>("cloud_negative", 100);
   marker_pub = nh_.advertise<visualization_msgs::Marker>("plane_marker", 1, true);
   marker_pub_cubelist = nh_.advertise<visualization_msgs::Marker>("cubelist_marker", 1, true);
+  marker_pub_gradient = nh_.advertise<visualization_msgs::Marker>("gradient_marker", 1, true);
+  marker_pub_grad_x = nh_.advertise<visualization_msgs::Marker>("grad_x_marker", 1, true);
+  marker_pub_grad_y = nh_.advertise<visualization_msgs::Marker>("grad_y_marker", 1, true);
+  marker_pub_grad_direction = nh_.advertise<visualization_msgs::Marker>("grad_direction_marker", 1, true);
   sub = nh_.subscribe<sensor_msgs::PointCloud2>("/road_reconstruction", 1, &NegObstc::GetPointCloud, this);
   // listener.lookupTransform("/ground", "/world", ros::Time(0), transform);
   // octomap_publisher = nh_.advertise<octomap_msgs::Octomap>("octree_reconst", 1);
@@ -163,6 +175,10 @@ void NegObstc::loop_function()
     marker_pub.publish(plane_marker);
     spatial_segmentation();
     marker_pub_cubelist.publish(cubelist_marker);
+    marker_pub_gradient.publish(gradient_marker);
+    marker_pub_grad_x.publish(grad_x_marker);
+    marker_pub_grad_y.publish(grad_y_marker);
+    marker_pub_grad_direction.publish(grad_direction_marker);
     // pcl::toROSMsg(Cloud_negative, CloudMsg_negative);
     // pub_negative.publish(CloudMsg_negative);
   }
@@ -217,11 +233,12 @@ void NegObstc::find_plane()
   plane_marker.pose.orientation.x = M_PI / 2 - atan2(coefficients->values[2], coefficients->values[1]);
   plane_marker.pose.orientation.y = M_PI / 2 - atan2(coefficients->values[2], coefficients->values[0]);
   plane_marker.pose.orientation.w = 1;
-  plane_marker.scale.x = 20;    // shape.dimensions[0];
-  plane_marker.scale.y = 20;    // shape.dimensions[1];
+  plane_marker.scale.x = 50;    // shape.dimensions[0];
+  plane_marker.scale.y = 50;    // shape.dimensions[1];
   plane_marker.scale.z = 0.01;  // shape.dimensions[2];
-  plane_marker.color.r = 1.0;
-  plane_marker.color.a = 0.8;
+  plane_marker.color.b = 1.0;
+  plane_marker.color.g = 0.5;
+  plane_marker.color.a = 0.3;
 
   /*trying to set total cloud*/
   if (Cloud_inliers_to_save.points.size() == 0)
@@ -237,63 +254,72 @@ void NegObstc::find_plane()
 
 void NegObstc::spatial_segmentation()
 {
-  N = 40 * 10;
+  nl = 10;
+  nc = 40;
+  N = nc * nl;
   i = 0;
+  lin=col=0;
+
+  pace = 40 / nc;
+  // int matriz[nc][nl];
+
   cubelist_marker.ns = "cubelist";
-  cubelist_marker.header.frame_id = "ground";
+  cubelist_marker.header.frame_id = "moving_axis";
   cubelist_marker.type = visualization_msgs::Marker::CUBE_LIST;
   cubelist_marker.points.resize(N);
   cubelist_marker.colors.resize(N);
-  cubelist_marker.scale.x = 1;  // shape.dimensions[0];
-  cubelist_marker.scale.y = 1;  // shape.dimensions[1];
-  cubelist_marker.scale.z = 1;
+  cubelist_marker.scale.x = pace;  // shape.dimensions[0];
+  cubelist_marker.scale.y = pace;  // shape.dimensions[1];
+  cubelist_marker.scale.z = pace;
 
-  /* TENTATIVA DE DIVISÃO ESPACIAL*/
-  pcl::getMinMax3D(*Cloud_Reconst, minR, maxR);
-  // pace = (maxR.y - minR.y) / 20;  // adjust pace
-  pace = 1;
-  for (int n_linhas = 0; n_linhas < 10; n_linhas++)
+  /*cubelist marker with gradient colorbar*/
+  gradient_2d grad[nc - 1][nl - 1];
+  gradient_marker.ns = "cubelist";
+  gradient_marker.header.frame_id = "moving_axis";
+  gradient_marker.type = visualization_msgs::Marker::CUBE_LIST;
+  gradient_marker.points.resize((nc - 1) * (nl - 1));
+  gradient_marker.colors.resize((nc - 1) * (nl - 1));
+  gradient_marker.scale.x = pace;  // shape.dimensions[0];
+  gradient_marker.scale.y = pace;  // shape.dimensions[1];
+  gradient_marker.scale.z = 0.01;
+
+  for (int n_linhas = 0; n_linhas <= 10 * pace - pace; n_linhas = n_linhas + pace)
   {
+    col = 0;
     for (int Y = -20; Y <= 20 - pace; Y = Y + pace)
     {
       Cropped_cloud.reset(new pcl::PointCloud<pcl::PointXYZ>);
       X_min = n_linhas;  // X_min = transform.getOrigin().x() + n_linhas;
-      X_max = X_min + 1;
+      X_max = X_min + pace;
       Y_min = Y;
       Y_max = Y + pace;
       Z_min = h_plane - 50;
       Z_max = h_plane + 50;
 
-      pcl_ros::transformPointCloud("ground", ros::Time(0), *Cloud_Reconst, "map", *Transformed_cloud, NegObstc::listener);
+      pcl_ros::transformPointCloud("moving_axis", ros::Time(0), *Cloud_Reconst, "map", *Transformed_cloud,
+                                   NegObstc::listener);
       boxFilter.setMin(Eigen::Vector4f(X_min, Y_min, Z_min, 1.0));
       boxFilter.setMax(Eigen::Vector4f(X_max, Y_max, Z_max, 1.0));
-      // boxFilter.setTranslation(
-      //     Eigen::Vector3f(transform.getOrigin().x(), transform.getOrigin().y(), transform.getOrigin().z()));
-      // boxFilter.setRotation(
-      //     Eigen::Vector3f(transform.getRotation().x(), transform.getRotation().y(), transform.getRotation().z()));
       boxFilter.setInputCloud(Transformed_cloud);
       boxFilter.filter(*Cropped_cloud);
       Cloud_check_sqr = (*Cropped_cloud);
       count_points = Cloud_check_sqr.points.size();
-      ROS_WARN("Number of points in square: %lu", count_points);
 
-      // if (count_points < 3)  // adjust number
-      // {
-      //   for (int i = 0; i < 20; i++) /*put 20 random points within empty cuboids*/
-      //   {
-      //     srand(time(NULL));
-      //     randPt.x = static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / (X_max - X_min))) + X_min;
-      //     randPt.y = static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / (Y_max - Y_min))) + Y_min;
-      //     randPt.z = static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / (Z_max - Z_min))) + Z_min;
-      //     Cloud_negative.push_back(randPt);
-      //   }
-      // }
+      ROS_WARN("Number of points in square %d (pos: %d, %d): %lu", i, n_linhas, Y, count_points);
 
-      cubelist_marker.points[i].x = n_linhas + 0.5;
+      cubelist_marker.points[i].x = n_linhas + pace / 2;
       cubelist_marker.points[i].y = Y + pace / 2;
-      cubelist_marker.points[i].z = h_plane + 0.5;
+      cubelist_marker.points[i].z = 0.01;
       cubelist_marker.colors[i].b = 0;
       cubelist_marker.colors[i].a = 0.5;
+
+      // if (col < nc && lin < nl)
+      // {
+      //   gradient_marker.points[i].x = X_max;
+      //   gradient_marker.points[i].y = Y_max;
+      //   gradient_marker.points[i].z = h_plane + pace / 2;
+      //   gradient_marker.colors[i].a = 0.8;
+      // }
 
       if (count_points > 100)
       {
@@ -331,8 +357,22 @@ void NegObstc::spatial_segmentation()
         cubelist_marker.colors[i].g = 0.0;
       }
       i++;
+      col++;
     }
+    lin++;
   }
+
+  ROS_WARN("linhas: %d, colunas: %d", lin, col);
+
+  // // calculate gradient matrix
+  // for (int l = 0; l < nl - 1; l++)
+  // {
+  //   for (int c = 0; c < nc - 1; c++)
+  //   {
+  //     grad[l][c].vertical = matriz[l + 1][c] - matriz[l][c];
+  //     grad[l][c].horizontal = matriz[l][c + 1] - matriz[l][c];
+  //   }
+  // }
 }
 
 /**
