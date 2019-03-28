@@ -12,6 +12,9 @@
         "core": "cpp",
         "numericaldiff": "cpp",
         "chrono": "cpp",
-        "cmath": "cpp"
+        "cmath": "cpp",
+        "bitset": "cpp",
+        "initializer_list": "cpp",
+        "string_view": "cpp"
     }
 }

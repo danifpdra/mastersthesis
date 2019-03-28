@@ -90,9 +90,9 @@ private:
       writeCount++;
       char filename[100];
       sprintf(filename, "/media/daniela/Dados/pcd_files/test_%d.pcd", writeCount);
-      pcl::io::savePCDFileASCII(filename, acum_cloud);
+      // pcl::io::savePCDFileASCII(filename, acum_cloud);
       // pcl::io::savePCDFile("thisisatest.pcd", acum_cloud, true);
-      ROS_INFO("Saved %lu points in point cloud", acum_cloud.points.size());
+      // ROS_INFO("Saved %lu points in point cloud", acum_cloud.points.size());
     }
   }
 };

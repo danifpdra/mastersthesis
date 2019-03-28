@@ -442,8 +442,8 @@ void NegObstc::spatial_segmentation()
           sqrt(pow(static_cast<double>(grad[l][c].vertical), 2) + pow(static_cast<double>(grad[l][c].horizontal), 2));
       grad[l][c].direction =
           atan2(static_cast<double>(grad[l][c].horizontal), static_cast<double>(grad[l][c].vertical));
-      ROS_WARN("Gx=%d, Gy=%d, G=%f, theta=%f", grad[l][c].vertical, grad[l][c].horizontal, grad[l][c].grad_tot,
-               grad[l][c].direction);
+      // ROS_WARN("Gx=%d, Gy=%d, G=%f, theta=%f", grad[l][c].vertical, grad[l][c].horizontal, grad[l][c].grad_tot,
+      //          grad[l][c].direction);
 
       /*Gx*/
       if (grad[l][c].vertical > 100)
@@ -646,14 +646,14 @@ void NegObstc::spatial_segmentation()
         level_gd = 100;
       }
 
-      ROS_WARN("Levels: Gx=%d, Gy=%d, G=%d, theta=%d", level_gx, level_gy, level_g, level_gd);
+      // ROS_WARN("Levels: Gx=%d, Gy=%d, G=%d, theta=%d", level_gx, level_gy, level_g, level_gd);
 
       color_grad = colorbar(level_g);
       color_grad_x = colorbar(level_gx);
       color_grad_y = colorbar(level_gy);
       color_grad_d = colorbar(level_gd);
 
-      ROS_WARN("Colors: R=%f, G=%f, B=%f", color_grad.r, color_grad.g, color_grad_x.b);
+      // ROS_WARN("Colors: R=%f, G=%f, B=%f", color_grad.r, color_grad.g, color_grad_x.b);
 
       gradient_marker.colors[j].r = color_grad.r;
       gradient_marker.colors[j].g = color_grad.g;
