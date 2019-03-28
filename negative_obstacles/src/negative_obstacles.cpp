@@ -1,4 +1,3 @@
-#include <novatel_gps_msgs/Inspva.h>
 #include <pcl/PCLPointCloud2.h>
 #include <pcl/common/common.h>
 #include <pcl/conversions.h>
@@ -35,34 +34,100 @@
 #include <pcl/sample_consensus/method_types.h>
 #include <pcl/sample_consensus/model_types.h>
 #include <pcl/segmentation/sac_segmentation.h>
-// #include <pcl/visualization/pcl_visualizer.h>
 
-/*visualizer*/
-#include <simple_grasping/cloud_tools.h>
-#include <simple_grasping/object_support_segmentation.h>
-#include <simple_grasping/shape_extraction.h>
 #include <visualization_msgs/Marker.h>
-#include "geometry_msgs/Pose.h"
-#include "shape_msgs/SolidPrimitive.h"
-
-// /*octomap*/
-// #include <octomap_msgs/GetOctomap.h>
-// #include <octomap_msgs/Octomap.h>
-// #include <octomap_msgs/conversions.h>
-// #include <octomap_ros/conversions.h>
-// #include <pcl/octree/octree_search.h>
 
 struct gradient_2d
 {
   int vertical;
   int horizontal;
+  double grad_tot;
+  double direction;
 };
+
+struct color
+{
+  double r;
+  double g;
+  double b;
+};
+
+color colorbar(int level)
+{
+  color color_rgb;
+
+  switch (level)
+  {
+    case -5:
+      color_rgb.r = 0;
+      color_rgb.g = 0;
+      color_rgb.b = 0.5;
+      break;
+    case -4:
+      color_rgb.r = 0;
+      color_rgb.g = 0;
+      color_rgb.b = 0.84;
+      break;
+    case -3:
+      color_rgb.r = 0;
+      color_rgb.g = 0.27;
+      color_rgb.b = 1;
+      break;
+    case -2:
+      color_rgb.r = 0;
+      color_rgb.g = 0.64;
+      color_rgb.b = 1;
+      break;
+    case -1:
+      color_rgb.r = 0.137;
+      color_rgb.g = 1;
+      color_rgb.b = 0.82;
+      break;
+    case 0:
+      color_rgb.r = 0.5;
+      color_rgb.g = 1;
+      color_rgb.b = 0.5;
+      break;
+    case 1:
+      color_rgb.r = 0.82;
+      color_rgb.g = 1;
+      color_rgb.b = 0.137;
+      break;
+    case 2:
+      color_rgb.r = 1;
+      color_rgb.g = 0.64;
+      color_rgb.b = 0;
+      break;
+    case 3:
+      color_rgb.r = 1;
+      color_rgb.g = 0.27;
+      color_rgb.b = 0;
+      break;
+    case 4:
+      color_rgb.r = 0.84;
+      color_rgb.g = 0;
+      color_rgb.b = 0;
+      break;
+    case 5:
+      color_rgb.r = 0.5;
+      color_rgb.g = 0;
+      color_rgb.b = 0;
+      break;
+    default:
+      color_rgb.r = 0.53;
+      color_rgb.g = 0.53;
+      color_rgb.b = 0.53;
+  }
+
+  return color_rgb;
+}
 
 class NegObstc
 {
 public:
   NegObstc();
   void loop_function();
+  // color colobar(int level);
 
 private:
   ros::NodeHandle nh_;
@@ -76,13 +141,14 @@ private:
   pcl::ModelCoefficients::Ptr coefficients;
   pcl::PointIndices::Ptr inliers;
   pcl::CropBox<pcl::PointXYZ> boxFilter;
-  // pcl::octree::OctreePointCloudSearch<pcl::PointXYZ> octree_reconst;
-  // pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_in_color, cloud_out_color;
-
   /*others*/
   float h_plane, pace, X_min, Y_min, Z_min, X_max, Y_max, Z_max;
   size_t count_points;
-  int N, i, writeCount, lin, col, nc, nl;
+  int N, i, j, writeCount, lin, col, nc, nl;
+  Eigen::MatrixXd matriz;
+  color color_grad, color_grad_x, color_grad_y, color_grad_d;
+  int level_g, level_gx, level_gy, level_gd;
+
   // Eigen::Vector3f min_pt, max_pt;
 
   /*publishers and subscribers*/
@@ -102,8 +168,6 @@ private:
   visualization_msgs::Marker gradient_marker, grad_x_marker, grad_y_marker, grad_direction_marker;
   sensor_msgs::PointCloud2 CloudMsg_plane;
   sensor_msgs::PointCloud2 CloudMsg_negative;
-  shape_msgs::SolidPrimitive shape;
-  geometry_msgs::Pose pose;
   // octomap_msgs::Octomap octree_msg;
 
   void find_plane();
@@ -146,8 +210,6 @@ NegObstc::NegObstc()
   marker_pub_grad_y = nh_.advertise<visualization_msgs::Marker>("grad_y_marker", 1, true);
   marker_pub_grad_direction = nh_.advertise<visualization_msgs::Marker>("grad_direction_marker", 1, true);
   sub = nh_.subscribe<sensor_msgs::PointCloud2>("/road_reconstruction", 1, &NegObstc::GetPointCloud, this);
-  // listener.lookupTransform("/ground", "/world", ros::Time(0), transform);
-  // octomap_publisher = nh_.advertise<octomap_msgs::Octomap>("octree_reconst", 1);
 
   /*initialize pointers*/
   Cloud_Reconst.reset(new pcl::PointCloud<pcl::PointXYZ>);
@@ -156,8 +218,6 @@ NegObstc::NegObstc()
   Transformed_cloud.reset(new pcl::PointCloud<pcl::PointXYZ>());
   coefficients.reset(new pcl::ModelCoefficients);
   inliers.reset(new pcl::PointIndices);
-  // cloud_in_color.reset(new pcl::PointCloud<pcl::PointXYZRGB>);
-  // cloud_out_color.reset(new pcl::PointCloud<pcl::PointXYZRGB>);
 }
 
 /**
@@ -179,8 +239,6 @@ void NegObstc::loop_function()
     marker_pub_grad_x.publish(grad_x_marker);
     marker_pub_grad_y.publish(grad_y_marker);
     marker_pub_grad_direction.publish(grad_direction_marker);
-    // pcl::toROSMsg(Cloud_negative, CloudMsg_negative);
-    // pub_negative.publish(CloudMsg_negative);
   }
 }
 
@@ -202,27 +260,15 @@ void NegObstc::find_plane()
   seg.setInputCloud(Cloud_Reconst);
   seg.segment(*inliers, *coefficients);
 
-  // pcl::computeMeanAndCovarianceMatrix(),
-
   if (inliers->indices.size() == 0)
   {
     PCL_ERROR("Could not estimate a planar model for the given dataset.");
   }
 
-  // std::cerr << "Model coefficients: " << coefficients->values[0] << " " << coefficients->values[1] << " "
-  //           << coefficients->values[2] << " " << coefficients->values[3] << std::endl;
-
   // copies all inliers of the model computed to another PointCloud
   pcl::copyPointCloud<pcl::PointXYZ>(*Cloud_Reconst, inliers->indices, *Cloud_inliers);
   pcl::getMinMax3D(*Cloud_inliers, minPt, maxPt);
   h_plane = minPt.z + (maxPt.z - minPt.z) / 2;
-  // h_plane = std::abs(coefficients->values[3] / sqrt(pow(coefficients->values[0], 2) + pow(coefficients->values[1], 2)
-  // + pow(coefficients->values[2], 2)));
-  // ROS_WARN("Finding ransac planes");
-  // pcl::copyPointCloud(*Cloud_inliers, *cloud_in_color);
-  // simple_grasping::extractUnorientedBoundingBox(*cloud_in_color,shape,pose);
-  // simple_grasping::extractShape(*cloud_in_color, *cloud_out_color, shape, plane_marker.pose);
-  // h_plane= simple_grasping::distancePointToPlane(origin_pt, coefficients);
 
   plane_marker.ns = "plane";
   plane_marker.header.frame_id = "ground";
@@ -254,13 +300,14 @@ void NegObstc::find_plane()
 
 void NegObstc::spatial_segmentation()
 {
-  nl = 10;
-  nc = 40;
+  nl = 20;
+  nc = 50;
   N = nc * nl;
-  i = 0;
-  lin=col=0;
+  i = j = 0;
+  lin = col = 0;
 
-  pace = 40 / nc;
+  pace = 50 / nc;
+  matriz.resize(nl, nc);
   // int matriz[nc][nl];
 
   cubelist_marker.ns = "cubelist";
@@ -274,19 +321,33 @@ void NegObstc::spatial_segmentation()
 
   /*cubelist marker with gradient colorbar*/
   gradient_2d grad[nc - 1][nl - 1];
-  gradient_marker.ns = "cubelist";
-  gradient_marker.header.frame_id = "moving_axis";
-  gradient_marker.type = visualization_msgs::Marker::CUBE_LIST;
+
+  gradient_marker.ns = "cubelist_gradient";
+  grad_x_marker.ns = "cubelist_grad_dx";
+  grad_y_marker.ns = "cubelist_grad_dy";
+  grad_direction_marker.ns = "cubelist_grad_direction";
+  gradient_marker.header.frame_id = grad_x_marker.header.frame_id = grad_y_marker.header.frame_id =
+      grad_direction_marker.header.frame_id = "moving_axis";
+  gradient_marker.type = grad_x_marker.type = grad_y_marker.type = grad_direction_marker.type =
+      visualization_msgs::Marker::CUBE_LIST;
   gradient_marker.points.resize((nc - 1) * (nl - 1));
   gradient_marker.colors.resize((nc - 1) * (nl - 1));
-  gradient_marker.scale.x = pace;  // shape.dimensions[0];
-  gradient_marker.scale.y = pace;  // shape.dimensions[1];
-  gradient_marker.scale.z = 0.01;
+  grad_x_marker.points.resize((nc - 1) * (nl - 1));
+  grad_x_marker.colors.resize((nc - 1) * (nl - 1));
+  grad_y_marker.points.resize((nc - 1) * (nl - 1));
+  grad_y_marker.colors.resize((nc - 1) * (nl - 1));
+  grad_direction_marker.points.resize((nc - 1) * (nl - 1));
+  grad_direction_marker.colors.resize((nc - 1) * (nl - 1));
+  gradient_marker.scale.x = grad_x_marker.scale.x = grad_y_marker.scale.x = grad_direction_marker.scale.x =
+      pace;  // shape.dimensions[0];
+  gradient_marker.scale.y = grad_x_marker.scale.y = grad_y_marker.scale.y = grad_direction_marker.scale.y =
+      pace;  // shape.dimensions[1];
+  gradient_marker.scale.z = grad_x_marker.scale.z = grad_y_marker.scale.z = grad_direction_marker.scale.z = 0.01;
 
-  for (int n_linhas = 0; n_linhas <= 10 * pace - pace; n_linhas = n_linhas + pace)
+  for (int n_linhas = 0; n_linhas <= 20 * pace - pace; n_linhas = n_linhas + pace)
   {
     col = 0;
-    for (int Y = -20; Y <= 20 - pace; Y = Y + pace)
+    for (int Y = -25; Y <= 25 - pace; Y = Y + pace)
     {
       Cropped_cloud.reset(new pcl::PointCloud<pcl::PointXYZ>);
       X_min = n_linhas;  // X_min = transform.getOrigin().x() + n_linhas;
@@ -305,7 +366,7 @@ void NegObstc::spatial_segmentation()
       Cloud_check_sqr = (*Cropped_cloud);
       count_points = Cloud_check_sqr.points.size();
 
-      ROS_WARN("Number of points in square %d (pos: %d, %d): %lu", i, n_linhas, Y, count_points);
+      // ROS_WARN("Number of points in square %d (pos: %d, %d): %lu", i, n_linhas, Y, count_points);
 
       cubelist_marker.points[i].x = n_linhas + pace / 2;
       cubelist_marker.points[i].y = Y + pace / 2;
@@ -313,13 +374,20 @@ void NegObstc::spatial_segmentation()
       cubelist_marker.colors[i].b = 0;
       cubelist_marker.colors[i].a = 0.5;
 
-      // if (col < nc && lin < nl)
-      // {
-      //   gradient_marker.points[i].x = X_max;
-      //   gradient_marker.points[i].y = Y_max;
-      //   gradient_marker.points[i].z = h_plane + pace / 2;
-      //   gradient_marker.colors[i].a = 0.8;
-      // }
+      matriz(lin, col) = count_points;
+
+      if (col <= nc - 2 && lin <= nl - 2)
+      {
+        gradient_marker.points[j].x = grad_x_marker.points[j].x = grad_y_marker.points[j].x =
+            grad_direction_marker.points[j].x = n_linhas + pace / 2;
+        gradient_marker.points[j].y = grad_x_marker.points[j].y = grad_y_marker.points[j].y =
+            grad_direction_marker.points[j].y = Y + pace / 2;
+        gradient_marker.points[j].z = grad_x_marker.points[j].z = grad_y_marker.points[j].z =
+            grad_direction_marker.points[j].z = 0.1;
+        gradient_marker.colors[j].a = grad_x_marker.colors[j].a = grad_y_marker.colors[j].a =
+            grad_direction_marker.colors[j].a = 1;
+        j++;
+      }
 
       if (count_points > 100)
       {
@@ -362,17 +430,250 @@ void NegObstc::spatial_segmentation()
     lin++;
   }
 
-  ROS_WARN("linhas: %d, colunas: %d", lin, col);
+  // calculate gradient matrix
+  j = 0;
+  for (int l = 0; l < nl - 1; l++)
+  {
+    for (int c = 0; c < nc - 1; c++)
+    {
+      grad[l][c].vertical = matriz(l + 1, c) - matriz(l, c);
+      grad[l][c].horizontal = matriz(l, c + 1) - matriz(l, c);
+      grad[l][c].grad_tot =
+          sqrt(pow(static_cast<double>(grad[l][c].vertical), 2) + pow(static_cast<double>(grad[l][c].horizontal), 2));
+      grad[l][c].direction =
+          atan2(static_cast<double>(grad[l][c].horizontal), static_cast<double>(grad[l][c].vertical));
+      ROS_WARN("Gx=%d, Gy=%d, G=%f, theta=%f", grad[l][c].vertical, grad[l][c].horizontal, grad[l][c].grad_tot,
+               grad[l][c].direction);
 
-  // // calculate gradient matrix
-  // for (int l = 0; l < nl - 1; l++)
-  // {
-  //   for (int c = 0; c < nc - 1; c++)
-  //   {
-  //     grad[l][c].vertical = matriz[l + 1][c] - matriz[l][c];
-  //     grad[l][c].horizontal = matriz[l][c + 1] - matriz[l][c];
-  //   }
-  // }
+      /*Gx*/
+      if (grad[l][c].vertical > 100)
+      {
+        level_gx = 5;
+      }
+      else if (grad[l][c].vertical >= 80 && grad[l][c].vertical < 100)
+      {
+        level_gx = 4;
+      }
+      else if (grad[l][c].vertical >= 60 && grad[l][c].vertical < 80)
+      {
+        level_gx = 3;
+      }
+      else if (grad[l][c].vertical >= 40 && grad[l][c].vertical < 60)
+      {
+        level_gx = 2;
+      }
+      else if (grad[l][c].vertical >= 20 && grad[l][c].vertical < 40)
+      {
+        level_gx = 1;
+      }
+      else if (grad[l][c].vertical >= 0 && grad[l][c].vertical < 20)
+      {
+        level_gx = 0;
+      }
+      else if (grad[l][c].vertical >= -20 && grad[l][c].vertical < 0)
+      {
+        level_gx = -1;
+      }
+      else if (grad[l][c].vertical >= -40 && grad[l][c].vertical < -20)
+      {
+        level_gx = -2;
+      }
+      else if (grad[l][c].vertical >= -60 && grad[l][c].vertical < -40)
+      {
+        level_gx = -3;
+      }
+      else if (grad[l][c].vertical >= -80 && grad[l][c].vertical < -60)
+      {
+        level_gx = -4;
+      }
+      else if (grad[l][c].vertical < -80)
+      {
+        level_gx = -5;
+      }
+      else
+      {
+        level_gx = 100;
+      }
+
+      /*Gy*/
+      if (grad[l][c].horizontal > 100)
+      {
+        level_gy = 5;
+      }
+      else if (grad[l][c].horizontal >= 80 && grad[l][c].horizontal < 100)
+      {
+        level_gy = 4;
+      }
+      else if (grad[l][c].horizontal >= 60 && grad[l][c].horizontal < 80)
+      {
+        level_gy = 3;
+      }
+      else if (grad[l][c].horizontal >= 40 && grad[l][c].horizontal < 60)
+      {
+        level_gy = 2;
+      }
+      else if (grad[l][c].horizontal >= 20 && grad[l][c].horizontal < 40)
+      {
+        level_gy = 1;
+      }
+      else if (grad[l][c].horizontal >= 0 && grad[l][c].horizontal < 20)
+      {
+        level_gy = 0;
+      }
+      else if (grad[l][c].horizontal >= -20 && grad[l][c].horizontal < 0)
+      {
+        level_gy = -1;
+      }
+      else if (grad[l][c].horizontal >= -40 && grad[l][c].horizontal < -20)
+      {
+        level_gy = -2;
+      }
+      else if (grad[l][c].horizontal >= -60 && grad[l][c].horizontal < -40)
+      {
+        level_gy = -3;
+      }
+      else if (grad[l][c].horizontal >= -80 && grad[l][c].horizontal < -60)
+      {
+        level_gy = -4;
+      }
+      else if (grad[l][c].horizontal < -80)
+      {
+        level_gy = -5;
+      }
+      else
+      {
+        level_gy = 100;
+      }
+
+      /*G*/
+
+      if (grad[l][c].grad_tot > 200)
+      {
+        level_g = 5;
+      }
+      else if (grad[l][c].grad_tot >= 180 && grad[l][c].grad_tot < 200)
+      {
+        level_g = 4;
+      }
+      else if (grad[l][c].grad_tot >= 160 && grad[l][c].grad_tot < 180)
+      {
+        level_g = 3;
+      }
+      else if (grad[l][c].grad_tot >= 140 && grad[l][c].grad_tot < 160)
+      {
+        level_g = 2;
+      }
+      else if (grad[l][c].grad_tot >= 120 && grad[l][c].grad_tot < 140)
+      {
+        level_g = 1;
+      }
+      else if (grad[l][c].grad_tot >= 100 && grad[l][c].grad_tot < 120)
+      {
+        level_g = 0;
+      }
+      else if (grad[l][c].grad_tot >= 80 && grad[l][c].grad_tot < 100)
+      {
+        level_g = -1;
+      }
+      else if (grad[l][c].grad_tot >= 60 && grad[l][c].grad_tot < 80)
+      {
+        level_g = -2;
+      }
+      else if (grad[l][c].grad_tot >= 40 && grad[l][c].grad_tot < 60)
+      {
+        level_g = -3;
+      }
+      else if (grad[l][c].grad_tot >= 20 && grad[l][c].grad_tot < 40)
+      {
+        level_g = -4;
+      }
+      else if (grad[l][c].grad_tot < 20)
+      {
+        level_g = -5;
+      }
+      else
+      {
+        level_g = 100;
+      }
+
+      /*Gradient direction*/
+      if (grad[l][c].direction > M_PI)
+      {
+        level_gd = 5;
+      }
+      else if (grad[l][c].direction >= (4 / 5) * M_PI && grad[l][c].direction < M_PI)
+      {
+        level_gd = 4;
+      }
+      else if (grad[l][c].direction >= (3 / 5) * M_PI && grad[l][c].direction < (4 / 5) * M_PI)
+      {
+        level_gd = 3;
+      }
+      else if (grad[l][c].direction >= (2 / 5) * M_PI && grad[l][c].direction < (3 / 5) * M_PI)
+      {
+        level_gd = 2;
+      }
+      else if (grad[l][c].direction >= (1 / 5) * M_PI && grad[l][c].direction < (2 / 5) * M_PI)
+      {
+        level_gd = 1;
+      }
+      else if (grad[l][c].direction >= 0 && grad[l][c].direction < (1 / 5) * M_PI)
+      {
+        level_gd = 0;
+      }
+      else if (grad[l][c].direction >= -(2 / 5) * M_PI && grad[l][c].direction < -(1 / 5) * M_PI)
+      {
+        level_gd = -1;
+      }
+      else if (grad[l][c].direction >= -(3 / 5) * M_PI && grad[l][c].direction < -(2 / 5) * M_PI)
+      {
+        level_gd = -2;
+      }
+      else if (grad[l][c].direction >= -(4 / 5) * M_PI && grad[l][c].direction < -(3 / 5) * M_PI)
+      {
+        level_gd = -3;
+      }
+      else if (grad[l][c].direction >= -M_PI && grad[l][c].direction < -(4 / 5) * M_PI)
+      {
+        level_gd = -4;
+      }
+      else if (grad[l][c].direction < -M_PI)
+      {
+        level_gd = -5;
+      }
+      else
+      {
+        level_gd = 100;
+      }
+
+      ROS_WARN("Levels: Gx=%d, Gy=%d, G=%d, theta=%d", level_gx, level_gy, level_g, level_gd);
+
+      color_grad = colorbar(level_g);
+      color_grad_x = colorbar(level_gx);
+      color_grad_y = colorbar(level_gy);
+      color_grad_d = colorbar(level_gd);
+
+      ROS_WARN("Colors: R=%f, G=%f, B=%f", color_grad.r, color_grad.g, color_grad_x.b);
+
+      gradient_marker.colors[j].r = color_grad.r;
+      gradient_marker.colors[j].g = color_grad.g;
+      gradient_marker.colors[j].b = color_grad.b;
+
+      grad_x_marker.colors[j].r = color_grad_x.r;
+      grad_x_marker.colors[j].g = color_grad_x.g;
+      grad_x_marker.colors[j].b = color_grad_x.b;
+
+      grad_y_marker.colors[j].r = color_grad_y.r;
+      grad_y_marker.colors[j].g = color_grad_y.g;
+      grad_y_marker.colors[j].b = color_grad_y.b;
+
+      grad_direction_marker.colors[j].r = color_grad_d.r;
+      grad_direction_marker.colors[j].g = color_grad_d.g;
+      grad_direction_marker.colors[j].b = color_grad_d.b;
+
+      j++;
+    }
+  }
 }
 
 /**
