@@ -56,7 +56,7 @@
 
     <!-- Launch the node   -->
     <node pkg="road_reconstruction" type="road_reconstruction" name="road_reconstruction" required="true" output="screen"/>
-        <!-- Launch the node   -->
+    <!-- Launch the node   -->
     <node pkg="negative_obstacles" type="negative_obstacles" name="negative_obstacles" required="true" output="screen"/>
     <!-- Launch the node   -->
     <!-- <node pkg="road_reconstruction" type="assem" name="assem" required="true" output="screen"/> -->
@@ -81,5 +81,5 @@
     <!--Launch the recorder-->
     <!-- <node name="rosbag_record" pkg="rosbag" type="record" output="screen" if="$(arg record)" args=" /ld_rms/scan0 /ld_rms/scan1  /ld_rms/scan2 /ld_rms/scan3 /lms151_D_scan /lms151_E_scan /camera/image_color -o $(find free_space_detection)/laserData/"/> -->
     <!--Launch the robot model-->
-    <include file="$(find free_space_detection)/launch/robotmodel.launch" output="log"/>
+    <!-- <include file="$(find free_space_detection)/launch/robotmodel.launch" output="log"/> -->
 </launch>

@@ -27,9 +27,6 @@
 #include <pcl/common/transforms.h>
 #include <pcl/console/parse.h>
 #include <pcl/filters/crop_box.h>
-#include <pcl/filters/extract_indices.h>
-#include <pcl/filters/statistical_outlier_removal.h>
-#include <pcl/filters/voxel_grid.h>
 #include <pcl/io/pcd_io.h>
 #include <pcl/sample_consensus/method_types.h>
 #include <pcl/sample_consensus/model_types.h>
@@ -300,13 +297,13 @@ void NegObstc::find_plane()
 
 void NegObstc::spatial_segmentation()
 {
-  nl = 20;
-  nc = 50;
+  pace = 0.5;
+  nl = 40 / pace;
+  nc = 40 / pace;
   N = nc * nl;
   i = j = 0;
   lin = col = 0;
 
-  pace = 50 / nc;
   matriz.resize(nl, nc);
   // int matriz[nc][nl];
 
@@ -344,10 +341,10 @@ void NegObstc::spatial_segmentation()
       pace;  // shape.dimensions[1];
   gradient_marker.scale.z = grad_x_marker.scale.z = grad_y_marker.scale.z = grad_direction_marker.scale.z = 0.01;
 
-  for (int n_linhas = 0; n_linhas <= 20 * pace - pace; n_linhas = n_linhas + pace)
+  for (int n_linhas = 0; n_linhas <= 40 - pace; n_linhas = n_linhas + pace)
   {
     col = 0;
-    for (int Y = -25; Y <= 25 - pace; Y = Y + pace)
+    for (int Y = -20; Y <= 20 - pace; Y = Y + pace)
     {
       Cropped_cloud.reset(new pcl::PointCloud<pcl::PointXYZ>);
       X_min = n_linhas;  // X_min = transform.getOrigin().x() + n_linhas;
