@@ -139,7 +139,7 @@ private:
   pcl::PointIndices::Ptr inliers;
   pcl::CropBox<pcl::PointXYZ> boxFilter;
   /*others*/
-  float h_plane, pace, X_min, Y_min, Z_min, X_max, Y_max, Z_max;
+  double h_plane, pace, X_min, Y_min, Z_min, X_max, Y_max, Z_max;
   size_t count_points;
   int N, i, j, writeCount, lin, col, nc, nl;
   Eigen::MatrixXd matriz;
@@ -186,7 +186,7 @@ private:
       sprintf(filename, "/media/daniela/Dados/pcd_files/planefittingcloud_%d.pcd", writeCount);
       // pcl::io::savePCDFileASCII(filename, Cloud_inliers_to_save);
       // pcl::io::savePCDFile("thisisatest.pcd", acum_cloud, true);
-      ROS_INFO("Saved %lu points in point cloud", Cloud_inliers_to_save.points.size());
+      // ROS_INFO("Saved %lu points in point cloud", Cloud_inliers_to_save.points.size());
     }
   }
 };
@@ -297,7 +297,7 @@ void NegObstc::find_plane()
 
 void NegObstc::spatial_segmentation()
 {
-  pace = 0.5;
+  pace = 1 / 2;
   nl = 40 / pace;
   nc = 40 / pace;
   N = nc * nl;
@@ -307,6 +307,7 @@ void NegObstc::spatial_segmentation()
   matriz.resize(nl, nc);
   // int matriz[nc][nl];
 
+  /*initialize density marker*/
   cubelist_marker.ns = "cubelist";
   cubelist_marker.header.frame_id = "moving_axis";
   cubelist_marker.type = visualization_msgs::Marker::CUBE_LIST;
@@ -319,6 +320,7 @@ void NegObstc::spatial_segmentation()
   /*cubelist marker with gradient colorbar*/
   gradient_2d grad[nc - 1][nl - 1];
 
+  /*initialize gradient markers*/
   gradient_marker.ns = "cubelist_gradient";
   grad_x_marker.ns = "cubelist_grad_dx";
   grad_y_marker.ns = "cubelist_grad_dy";
@@ -341,12 +343,14 @@ void NegObstc::spatial_segmentation()
       pace;  // shape.dimensions[1];
   gradient_marker.scale.z = grad_x_marker.scale.z = grad_y_marker.scale.z = grad_direction_marker.scale.z = 0.01;
 
+  /*Calculate cuboid density and gradients and attribuiting to markers*/
   for (int n_linhas = 0; n_linhas <= 40 - pace; n_linhas = n_linhas + pace)
   {
     col = 0;
     for (int Y = -20; Y <= 20 - pace; Y = Y + pace)
     {
-      Cropped_cloud.reset(new pcl::PointCloud<pcl::PointXYZ>);
+      ROS_WARN("Number of points in square %d (pos: %d, %d): %lu", i, n_linhas, Y, count_points);
+      // Cropped_cloud.reset(new pcl::PointCloud<pcl::PointXYZ>);
       X_min = n_linhas;  // X_min = transform.getOrigin().x() + n_linhas;
       X_max = X_min + pace;
       Y_min = Y;
@@ -362,8 +366,6 @@ void NegObstc::spatial_segmentation()
       boxFilter.filter(*Cropped_cloud);
       Cloud_check_sqr = (*Cropped_cloud);
       count_points = Cloud_check_sqr.points.size();
-
-      // ROS_WARN("Number of points in square %d (pos: %d, %d): %lu", i, n_linhas, Y, count_points);
 
       cubelist_marker.points[i].x = n_linhas + pace / 2;
       cubelist_marker.points[i].y = Y + pace / 2;
