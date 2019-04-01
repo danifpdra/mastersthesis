@@ -165,11 +165,11 @@ void NegObstc::loop_function()
   if (Cloud_check_size.points.size() != 0)
   {
     spatial_segmentation();
-    marker_pub_cubelist.publish(cubelist_marker);
-    marker_pub_gradient.publish(gradient_marker);
-    marker_pub_grad_x.publish(grad_x_marker);
-    marker_pub_grad_y.publish(grad_y_marker);
-    marker_pub_grad_direction.publish(grad_direction_marker);
+    // marker_pub_cubelist.publish(cubelist_marker);
+    // marker_pub_gradient.publish(gradient_marker);
+    // marker_pub_grad_x.publish(grad_x_marker);
+    // marker_pub_grad_y.publish(grad_y_marker);
+    // marker_pub_grad_direction.publish(grad_direction_marker);
     map_pub.publish(newGrid);
   }
 }
@@ -224,6 +224,9 @@ void NegObstc::spatial_segmentation()
       pace;  // shape.dimensions[1];
   gradient_marker.scale.z = grad_x_marker.scale.z = grad_y_marker.scale.z = grad_direction_marker.scale.z = 0.01;
 
+  pcl_ros::transformPointCloud("moving_axis", ros::Time(0), *Cloud_Reconst, "map", *Transformed_cloud,
+                               NegObstc::listener);
+
   /*Calculate cuboid density and gradients and attribuiting to markers*/
   for (double Y = -20; Y <= 20 - pace; Y = Y + pace)
   {
@@ -239,8 +242,6 @@ void NegObstc::spatial_segmentation()
       Z_min = h_plane - 50;
       Z_max = h_plane + 50;
 
-      pcl_ros::transformPointCloud("moving_axis", ros::Time(0), *Cloud_Reconst, "map", *Transformed_cloud,
-                                   NegObstc::listener);
       boxFilter.setMin(Eigen::Vector4f(X_min, Y_min, Z_min, 1.0));
       boxFilter.setMax(Eigen::Vector4f(X_max, Y_max, Z_max, 1.0));
       boxFilter.setInputCloud(Transformed_cloud);
