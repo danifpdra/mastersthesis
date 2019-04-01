@@ -38,7 +38,90 @@
 #include "nav_msgs/OccupancyGrid.h"
 #include "std_msgs/Header.h"
 
-#include "negative_obstacles/negative_obstacles.h"
+struct gradient_2d
+{
+  int vertical;
+  int horizontal;
+  double grad_tot;
+  double direction;
+};
+
+struct color
+{
+  double r;
+  double g;
+  double b;
+};
+
+color colorbar(int level)
+{
+  color color_rgb;
+
+  switch (level)
+  {
+    case -5:
+      color_rgb.r = 0;
+      color_rgb.g = 0;
+      color_rgb.b = 0.5;
+      break;
+    case -4:
+      color_rgb.r = 0;
+      color_rgb.g = 0;
+      color_rgb.b = 0.84;
+      break;
+    case -3:
+      color_rgb.r = 0;
+      color_rgb.g = 0.27;
+      color_rgb.b = 1;
+      break;
+    case -2:
+      color_rgb.r = 0;
+      color_rgb.g = 0.64;
+      color_rgb.b = 1;
+      break;
+    case -1:
+      color_rgb.r = 0.137;
+      color_rgb.g = 1;
+      color_rgb.b = 0.82;
+      break;
+    case 0:
+      color_rgb.r = 0.5;
+      color_rgb.g = 1;
+      color_rgb.b = 0.5;
+      break;
+    case 1:
+      color_rgb.r = 0.82;
+      color_rgb.g = 1;
+      color_rgb.b = 0.137;
+      break;
+    case 2:
+      color_rgb.r = 1;
+      color_rgb.g = 0.64;
+      color_rgb.b = 0;
+      break;
+    case 3:
+      color_rgb.r = 1;
+      color_rgb.g = 0.27;
+      color_rgb.b = 0;
+      break;
+    case 4:
+      color_rgb.r = 0.84;
+      color_rgb.g = 0;
+      color_rgb.b = 0;
+      break;
+    case 5:
+      color_rgb.r = 0.5;
+      color_rgb.g = 0;
+      color_rgb.b = 0;
+      break;
+    default:
+      color_rgb.r = 0.53;
+      color_rgb.g = 0.53;
+      color_rgb.b = 0.53;
+  }
+
+  return color_rgb;
+}
 
 class NegObstc
 {
@@ -66,11 +149,12 @@ private:
   Eigen::MatrixXd matriz;
   color color_grad, color_grad_x, color_grad_y, color_grad_d;
   int level_g, level_gx, level_gy, level_gd;
-  std::vector <signed char>data_points;
 
   // Eigen::Vector3f min_pt, max_pt;
 
   /*publishers and subscribers*/
+  ros::Publisher pub_plane;
+  ros::Publisher pub_negative;
   ros::Subscriber sub;
   ros::Publisher marker_pub;
   ros::Publisher marker_pub_cubelist;
@@ -81,15 +165,17 @@ private:
   // ros::Publisher octomap_publisher;
 
   /*messages*/
+  visualization_msgs::Marker plane_marker;
   visualization_msgs::Marker cubelist_marker;
   visualization_msgs::Marker gradient_marker, grad_x_marker, grad_y_marker, grad_direction_marker;
+  sensor_msgs::PointCloud2 CloudMsg_plane;
+  sensor_msgs::PointCloud2 CloudMsg_negative;
   std_msgs::Header header;
   nav_msgs::MapMetaData info;
-  nav_msgs::OccupancyGrid newGrid;
-  // geometry_msgs / pose Pose;
+  nav_msgs::OccupancyGrid *newGrid;
   // octomap_msgs::Octomap octree_msg;
 
-  //   void find_plane();
+  void find_plane();
   void spatial_segmentation();
 
   void GetPointCloud(const sensor_msgs::PointCloud2ConstPtr &cloud_msg)
@@ -120,11 +206,13 @@ private:
 NegObstc::NegObstc()
 {
   /*publishers and subscribers*/
+  pub_plane = nh_.advertise<sensor_msgs::PointCloud2>("cloud_plane", 100);
+  pub_negative = nh_.advertise<sensor_msgs::PointCloud2>("cloud_negative", 100);
+  marker_pub = nh_.advertise<visualization_msgs::Marker>("plane_marker", 1, true);
   marker_pub_cubelist = nh_.advertise<visualization_msgs::Marker>("cubelist_marker", 1, true);
   marker_pub_gradient = nh_.advertise<visualization_msgs::Marker>("gradient_marker", 1, true);
   marker_pub_grad_x = nh_.advertise<visualization_msgs::Marker>("grad_x_marker", 1, true);
   marker_pub_grad_y = nh_.advertise<visualization_msgs::Marker>("grad_y_marker", 1, true);
-  map_pub = nh_.advertise<nav_msgs::OccupancyGrid>("map_pub", 1, true);
   marker_pub_grad_direction = nh_.advertise<visualization_msgs::Marker>("grad_direction_marker", 1, true);
   sub = nh_.subscribe<sensor_msgs::PointCloud2>("/road_reconstruction", 1, &NegObstc::GetPointCloud, this);
 
@@ -163,15 +251,80 @@ void NegObstc::loop_function()
 {
   Cloud_check_size = (*Cloud_Reconst);
   if (Cloud_check_size.points.size() != 0)
+  {
+    find_plane();
+    pcl::toROSMsg(*Cloud_inliers, CloudMsg_plane);
+    pub_plane.publish(CloudMsg_plane);
+    marker_pub.publish(plane_marker);
     spatial_segmentation();
-  marker_pub_cubelist.publish(cubelist_marker);
-  marker_pub_gradient.publish(gradient_marker);
-  marker_pub_grad_x.publish(grad_x_marker);
-  marker_pub_grad_y.publish(grad_y_marker);
-  marker_pub_grad_direction.publish(grad_direction_marker);
-  map_pub.publish(newGrid);
+    marker_pub_cubelist.publish(cubelist_marker);
+    marker_pub_gradient.publish(gradient_marker);
+    marker_pub_grad_x.publish(grad_x_marker);
+    marker_pub_grad_y.publish(grad_y_marker);
+    marker_pub_grad_direction.publish(grad_direction_marker);
+
+    newGrid->header = header;
+    newGrid->info = info;
+    newGrid->data=data;
+    map_pub.publish(*newGrid);
+  }
 }
 
+/**
+ * @brief function to calculate and draw the medium road plane
+ *
+ */
+void NegObstc::find_plane()
+{
+  // Optional
+  seg.setOptimizeCoefficients(true);
+
+  // Mandatory
+  seg.setModelType(pcl::SACMODEL_PLANE);
+  seg.setMethodType(pcl::SAC_RANSAC);
+  seg.setDistanceThreshold(0.3);
+  seg.setMaxIterations(1000);
+
+  seg.setInputCloud(Cloud_Reconst);
+  seg.segment(*inliers, *coefficients);
+
+  if (inliers->indices.size() == 0)
+  {
+    PCL_ERROR("Could not estimate a planar model for the given dataset.");
+  }
+
+  // copies all inliers of the model computed to another PointCloud
+  pcl::copyPointCloud<pcl::PointXYZ>(*Cloud_Reconst, inliers->indices, *Cloud_inliers);
+  pcl::getMinMax3D(*Cloud_inliers, minPt, maxPt);
+  h_plane = minPt.z + (maxPt.z - minPt.z) / 2;
+
+  plane_marker.ns = "plane";
+  plane_marker.header.frame_id = "ground";
+  plane_marker.type = visualization_msgs::Marker::CUBE;
+  plane_marker.pose.position.x = 10;
+  // plane_marker.pose.position.y = (maxPt.y - minPt.y) / 2;
+  plane_marker.pose.position.z = h_plane;
+  plane_marker.pose.orientation.x = M_PI / 2 - atan2(coefficients->values[2], coefficients->values[1]);
+  plane_marker.pose.orientation.y = M_PI / 2 - atan2(coefficients->values[2], coefficients->values[0]);
+  plane_marker.pose.orientation.w = 1;
+  plane_marker.scale.x = 50;    // shape.dimensions[0];
+  plane_marker.scale.y = 50;    // shape.dimensions[1];
+  plane_marker.scale.z = 0.01;  // shape.dimensions[2];
+  plane_marker.color.b = 1.0;
+  plane_marker.color.g = 0.5;
+  plane_marker.color.a = 0.3;
+
+  /*trying to set total cloud*/
+  if (Cloud_inliers_to_save.points.size() == 0)
+  {
+    Cloud_inliers_to_save = *Cloud_inliers;
+  }
+  else
+  {
+    Cloud_inliers_to_save = Cloud_inliers_to_save + *Cloud_inliers;
+    // ROS_INFO("Escrevi na nova cloud e o seu tamanho é %lu",acum_cloud.points.size());
+  }
+}
 
 void NegObstc::spatial_segmentation()
 {
@@ -181,13 +334,14 @@ void NegObstc::spatial_segmentation()
   N = nc * nl;
   i = j = 0;
   lin = col = 0;
-  data_points.resize(N);
+  int8 data[N];
 
   header.frame_id = "moving_axis";
   info.height = nc;
   info.width = nl;
   info.resolution = pace;
   info.map_load_time = header.stamp = ros::Time(0);
+
   matriz.resize(nl, nc);
   // int matriz[nc][nl];
 
@@ -265,43 +419,43 @@ void NegObstc::spatial_segmentation()
       {
         cubelist_marker.colors[i].r = 0.0;
         cubelist_marker.colors[i].g = 1.0;
-        data_points[i] = 100;
+        data[i] = 100;
       }
       else if (count_points >= 75 * pace && count_points < 100 * pace)
       {
         cubelist_marker.colors[i].r = 0.29;
         cubelist_marker.colors[i].g = 1.0;
-        data_points[i] = 75;
+        data[i] = 75;
       }
       else if (count_points >= 50 * pace && count_points < 75 * pace)
       {
         cubelist_marker.colors[i].r = 0.58;
         cubelist_marker.colors[i].g = 1.0;
-        data_points[i] = 50;
+        data[i] = 50;
       }
       else if (count_points >= 25 * pace && count_points < 50 * pace)
       {
         cubelist_marker.colors[i].r = 0.90;
         cubelist_marker.colors[i].g = 1.0;
-        data_points[i] = 25;
+        data[i] = 25;
       }
       else if (count_points >= 10 * pace && count_points < 25 * pace)
       {
         cubelist_marker.colors[i].r = 1.0;
         cubelist_marker.colors[i].g = 0.80;
-        data_points[i] = 10;
+        data[i] = 10;
       }
       else if (count_points >= 5 * pace && count_points < 10 * pace)
       {
         cubelist_marker.colors[i].r = 1.0;
         cubelist_marker.colors[i].g = 0.5;
-        data_points[i] = 5;
+        data[i] = 5;
       }
       else
       {
         cubelist_marker.colors[i].r = 1.0;
         cubelist_marker.colors[i].g = 0.0;
-        data_points[i] = 1;
+        data[i] = 1;
       }
 
       i++;
@@ -309,10 +463,6 @@ void NegObstc::spatial_segmentation()
     }
     lin++;
   }
-
-  newGrid.header = header;
-  newGrid.info = info;
-  newGrid.data = data_points;
 
   // calculate gradient matrix
   j = 0;

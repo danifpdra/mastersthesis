@@ -131,7 +131,7 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
   ${Eigen_INCLUDE_DIRS}
   ${PCL_INCLUDE_DIRS}
- # include
+  include
 )
 
 ## Declare a C++ library
