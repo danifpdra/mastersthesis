@@ -66,7 +66,7 @@ private:
   Eigen::MatrixXd matriz;
   color color_grad, color_grad_x, color_grad_y, color_grad_d;
   int level_g, level_gx, level_gy, level_gd;
-  std::vector <signed char>data_points;
+  std::vector<signed char> data_points;
 
   // Eigen::Vector3f min_pt, max_pt;
 
@@ -163,15 +163,16 @@ void NegObstc::loop_function()
 {
   Cloud_check_size = (*Cloud_Reconst);
   if (Cloud_check_size.points.size() != 0)
+  {
     spatial_segmentation();
-  marker_pub_cubelist.publish(cubelist_marker);
-  marker_pub_gradient.publish(gradient_marker);
-  marker_pub_grad_x.publish(grad_x_marker);
-  marker_pub_grad_y.publish(grad_y_marker);
-  marker_pub_grad_direction.publish(grad_direction_marker);
-  map_pub.publish(newGrid);
+    marker_pub_cubelist.publish(cubelist_marker);
+    marker_pub_gradient.publish(gradient_marker);
+    marker_pub_grad_x.publish(grad_x_marker);
+    marker_pub_grad_y.publish(grad_y_marker);
+    marker_pub_grad_direction.publish(grad_direction_marker);
+    map_pub.publish(newGrid);
+  }
 }
-
 
 void NegObstc::spatial_segmentation()
 {
@@ -188,6 +189,13 @@ void NegObstc::spatial_segmentation()
   info.width = nl;
   info.resolution = pace;
   info.map_load_time = header.stamp = ros::Time(0);
+  info.origin.position.x = 0;
+  info.origin.position.y = -20;
+  info.origin.position.z = 0;
+  info.origin.orientation.x = 0;
+  info.origin.orientation.y = 0;
+  info.origin.orientation.z = 0;
+
   matriz.resize(nl, nc);
   // int matriz[nc][nl];
 
@@ -217,10 +225,10 @@ void NegObstc::spatial_segmentation()
   gradient_marker.scale.z = grad_x_marker.scale.z = grad_y_marker.scale.z = grad_direction_marker.scale.z = 0.01;
 
   /*Calculate cuboid density and gradients and attribuiting to markers*/
-  for (double n_linhas = 0; n_linhas <= 40 - pace; n_linhas = n_linhas + pace)
+  for (double Y = -20; Y <= 20 - pace; Y = Y + pace)
   {
-    col = 0;
-    for (double Y = -20; Y <= 20 - pace; Y = Y + pace)
+    lin = 0;
+    for (double n_linhas = 0; n_linhas <= 40 - pace; n_linhas = n_linhas + pace)
     {
       // ROS_WARN("Number of points in square %d (pos: %f, %f): %lu", i, n_linhas, Y, count_points);
       // Cropped_cloud.reset(new pcl::PointCloud<pcl::PointXYZ>);
@@ -305,9 +313,9 @@ void NegObstc::spatial_segmentation()
       }
 
       i++;
-      col++;
+      lin++;
     }
-    lin++;
+    col++;
   }
 
   newGrid.header = header;
