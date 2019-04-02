@@ -57,9 +57,8 @@ private:
   /*others*/
   double pace;
   int N, i, j, writeCount, lin, col, nc, nl;
-  Eigen::MatrixXd matriz;
+  Eigen::MatrixXd densityMatrix;
   color color_grad, color_grad_x, color_grad_y, color_grad_d;
-  int level_g, level_gx, level_gy, level_gd;
   std::vector<signed char> density_points, grad_points, grad_x_points, grad_y_points, grad_dir_points;
 
   /*publishers and subscribers*/
@@ -111,7 +110,7 @@ void NegObstc::loop_function()
   {
     spatial_segmentation();
     densityGrid.data = density_points;
-    densityGrid.data =  grad_points;
+    densityGrid.data = grad_points;
     densityGrid.data = grad_x_points;
     densityGrid.data = grad_y_points;
     densityGrid.data = grad_dir_points;
@@ -132,9 +131,24 @@ void NegObstc::spatial_segmentation()
   N = nc * nl;
   i = j = 0;
   lin = col = 0;
+
+  /*clearing grid data*/
   density_points.clear();
   density_points.resize(N);
 
+  grad_points.clear();
+  grad_points.resize(N);
+
+  grad_x_points.clear();
+  grad_x_points.resize(N);
+
+  grad_y_points.clear();
+  grad_y_points.resize(N);
+
+  grad_dir_points.clear();
+  grad_dir_points.resize(N);
+
+  /*initalizing messages for OccupancyGrid construction*/
   info.height = nc;
   info.width = nl;
   info.resolution = pace;
@@ -150,8 +164,9 @@ void NegObstc::spatial_segmentation()
   densityGrid.header = header;
   densityGrid.info = info;
 
-  matriz.resize(nl, nc);
-  matriz.setZero(nl, nc);
+  /*initialize matrix to save density*/
+  densityMatrix.resize(nl, nc);
+  densityMatrix.setZero(nl, nc);
 
   /*cubelist marker with gradient colorbar*/
   gradient_2d grad[nc - 1][nl - 1];
@@ -169,7 +184,7 @@ void NegObstc::spatial_segmentation()
       col = (int)floor(point.y / pace) + 20 / pace;
 
       if (lin < nl && col < nc)
-        matriz(lin, col) += 1;
+        densityMatrix(lin, col) += 1;
       if (lin + col * nl < N)
         density_points[lin + col * nl] += 3;
     }
@@ -181,8 +196,8 @@ void NegObstc::spatial_segmentation()
   {
     for (int c = 0; c < nc - 1; c++)
     {
-      grad[l][c].vertical = matriz(l + 1, c) - matriz(l, c);
-      grad[l][c].horizontal = matriz(l, c + 1) - matriz(l, c);
+      grad[l][c].vertical = densityMatrix(l + 1, c) - densityMatrix(l, c);
+      grad[l][c].horizontal = densityMatrix(l, c + 1) - densityMatrix(l, c);
       // grad[l][c].grad_tot =
       //     sqrt(pow(static_cast<double>(grad[l][c].vertical), 2) + pow(static_cast<double>(grad[l][c].horizontal),
       //     2));
@@ -190,216 +205,210 @@ void NegObstc::spatial_segmentation()
           abs(static_cast<double>(grad[l][c].vertical)) + abs(static_cast<double>(grad[l][c].horizontal));
       grad[l][c].direction =
           atan2(static_cast<double>(grad[l][c].horizontal), static_cast<double>(grad[l][c].vertical));
-      // ROS_WARN("Gx=%d, Gy=%d, G=%f, theta=%f", grad[l][c].vertical, grad[l][c].horizontal, grad[l][c].grad_tot,
-      //          grad[l][c].direction);
 
       /*Gx*/
       if (grad[l][c].vertical > 100)
       {
-        level_gx = 5;
+        grad_x_points[j] = 100;
       }
       else if (grad[l][c].vertical >= 80 && grad[l][c].vertical < 100)
       {
-        level_gx = 4;
+        grad_x_points[j] = 80;
       }
       else if (grad[l][c].vertical >= 60 && grad[l][c].vertical < 80)
       {
-        level_gx = 3;
+        grad_x_points[j] = 60;
       }
       else if (grad[l][c].vertical >= 40 && grad[l][c].vertical < 60)
       {
-        level_gx = 2;
+        grad_x_points[j] = 40;
       }
       else if (grad[l][c].vertical >= 20 && grad[l][c].vertical < 40)
       {
-        level_gx = 1;
+        grad_x_points[j] = 20;
       }
       else if (grad[l][c].vertical >= 0 && grad[l][c].vertical < 20)
       {
-        level_gx = 0;
+        grad_x_points[j] = 0;
       }
       else if (grad[l][c].vertical >= -20 && grad[l][c].vertical < 0)
       {
-        level_gx = -1;
+        grad_x_points[j] = 20;
       }
       else if (grad[l][c].vertical >= -40 && grad[l][c].vertical < -20)
       {
-        level_gx = -2;
+        grad_x_points[j] = 40;
       }
       else if (grad[l][c].vertical >= -60 && grad[l][c].vertical < -40)
       {
-        level_gx = -3;
+        grad_x_points[j] = 60;
       }
       else if (grad[l][c].vertical >= -80 && grad[l][c].vertical < -60)
       {
-        level_gx = -4;
+        grad_x_points[j] = 80;
       }
       else if (grad[l][c].vertical < -80)
       {
-        level_gx = -5;
+        grad_x_points[j] = 100;
       }
       else
       {
-        level_gx = 100;
+        grad_x_points[j] = 0;
       }
 
       /*Gy*/
       if (grad[l][c].horizontal > 100)
       {
-        level_gy = 5;
+        grad_y_points[j] = 100;
       }
       else if (grad[l][c].horizontal >= 80 && grad[l][c].horizontal < 100)
       {
-        level_gy = 4;
+        grad_y_points[j] = 80;
       }
       else if (grad[l][c].horizontal >= 60 && grad[l][c].horizontal < 80)
       {
-        level_gy = 3;
+        grad_y_points[j] = 60;
       }
       else if (grad[l][c].horizontal >= 40 && grad[l][c].horizontal < 60)
       {
-        level_gy = 2;
+        grad_y_points[j] = 40;
       }
       else if (grad[l][c].horizontal >= 20 && grad[l][c].horizontal < 40)
       {
-        level_gy = 1;
+        grad_y_points[j] = 20;
       }
       else if (grad[l][c].horizontal >= 0 && grad[l][c].horizontal < 20)
       {
-        level_gy = 0;
+        grad_y_points[j] = 0;
       }
       else if (grad[l][c].horizontal >= -20 && grad[l][c].horizontal < 0)
       {
-        level_gy = -1;
+        grad_y_points[j] = 20;
       }
       else if (grad[l][c].horizontal >= -40 && grad[l][c].horizontal < -20)
       {
-        level_gy = -2;
+        grad_y_points[j] = 40;
       }
       else if (grad[l][c].horizontal >= -60 && grad[l][c].horizontal < -40)
       {
-        level_gy = -3;
+        grad_y_points[j] = 60;
       }
       else if (grad[l][c].horizontal >= -80 && grad[l][c].horizontal < -60)
       {
-        level_gy = -4;
+        grad_y_points[j] = 80;
       }
       else if (grad[l][c].horizontal < -80)
       {
-        level_gy = -5;
+        grad_y_points[j] = = 100;
       }
       else
       {
-        level_gy = 100;
+        grad_y_points[j] = 0;
       }
 
       /*G*/
 
       if (grad[l][c].grad_tot > 200)
       {
-        level_g = 5;
+        grad_points[j] = 100;
       }
       else if (grad[l][c].grad_tot >= 180 && grad[l][c].grad_tot < 200)
       {
-        level_g = 4;
+        grad_points[j] = 80;
       }
       else if (grad[l][c].grad_tot >= 160 && grad[l][c].grad_tot < 180)
       {
-        level_g = 3;
+        grad_points[j] = 60;
       }
       else if (grad[l][c].grad_tot >= 140 && grad[l][c].grad_tot < 160)
       {
-        level_g = 2;
+        grad_points[j] = 40;
       }
       else if (grad[l][c].grad_tot >= 120 && grad[l][c].grad_tot < 140)
       {
-        level_g = 1;
+        grad_points[j] = 20;
       }
       else if (grad[l][c].grad_tot >= 100 && grad[l][c].grad_tot < 120)
       {
-        level_g = 0;
+        grad_points[j] = 0;
       }
       else if (grad[l][c].grad_tot >= 80 && grad[l][c].grad_tot < 100)
       {
-        level_g = -1;
+        grad_points[j] = 20;
       }
       else if (grad[l][c].grad_tot >= 60 && grad[l][c].grad_tot < 80)
       {
-        level_g = -2;
+        grad_points[j] = 40;
       }
       else if (grad[l][c].grad_tot >= 40 && grad[l][c].grad_tot < 60)
       {
-        level_g = -3;
+        grad_points[j] = 60;
       }
       else if (grad[l][c].grad_tot >= 20 && grad[l][c].grad_tot < 40)
       {
-        level_g = -4;
+        grad_points[j] = 80;
       }
       else if (grad[l][c].grad_tot < 20)
       {
-        level_g = -5;
+        grad_points[j] = = 100;
       }
       else
       {
-        level_g = 100;
+        grad_points[j] = 0;
       }
 
       /*Gradient direction*/
       if (grad[l][c].direction > M_PI)
       {
-        level_gd = 5;
+        grad_dir_points[j] = 100;
       }
       else if (grad[l][c].direction >= (4 / 5) * M_PI && grad[l][c].direction < M_PI)
       {
-        level_gd = 4;
+        grad_dir_points[j] = 80;
       }
       else if (grad[l][c].direction >= (3 / 5) * M_PI && grad[l][c].direction < (4 / 5) * M_PI)
       {
-        level_gd = 3;
+        grad_dir_points[j] = 60;
       }
       else if (grad[l][c].direction >= (2 / 5) * M_PI && grad[l][c].direction < (3 / 5) * M_PI)
       {
-        level_gd = 2;
+        grad_dir_points[j] = 40;
       }
       else if (grad[l][c].direction >= (1 / 5) * M_PI && grad[l][c].direction < (2 / 5) * M_PI)
       {
-        level_gd = 1;
+        grad_dir_points[j] = 20;
       }
       else if (grad[l][c].direction >= 0 && grad[l][c].direction < (1 / 5) * M_PI)
       {
-        level_gd = 0;
+        grad_dir_points[j] = 0;
       }
       else if (grad[l][c].direction >= -(2 / 5) * M_PI && grad[l][c].direction < -(1 / 5) * M_PI)
       {
-        level_gd = -1;
+        grad_dir_points[j] = 20;
       }
       else if (grad[l][c].direction >= -(3 / 5) * M_PI && grad[l][c].direction < -(2 / 5) * M_PI)
       {
-        level_gd = -2;
+        grad_dir_points[j] = 40;
       }
       else if (grad[l][c].direction >= -(4 / 5) * M_PI && grad[l][c].direction < -(3 / 5) * M_PI)
       {
-        level_gd = -3;
+        grad_dir_points[j] = 60;
       }
       else if (grad[l][c].direction >= -M_PI && grad[l][c].direction < -(4 / 5) * M_PI)
       {
-        level_gd = -4;
+        grad_dir_points[j] = 80;
       }
       else if (grad[l][c].direction < -M_PI)
       {
-        level_gd = -5;
+        grad_dir_points[j] = = 100;
       }
       else
       {
-        level_gd = 100;
+        grad_dir_points[j] = 0;
       }
 
-      // ROS_WARN("Levels: Gx=%d, Gy=%d, G=%d, theta=%d", level_gx, level_gy, level_g, level_gd);
-
-      color_grad = colorbar(level_g);
-      color_grad_x = colorbar(level_gx);
-      color_grad_y = colorbar(level_gy);
-      color_grad_d = colorbar(level_gd);
+      // ROS_WARN("Levels: Gx=%d, Gy=%d, G=%d, theta=%d", grad_x_points[j], grad_y_points[j], grad_points[j],
+      // grad_dir_points[j]);
 
       j++;
     }
