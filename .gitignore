@@ -54,5 +54,8 @@ CATKIN_IGNORE
 
 
 bags/Volta_UA.bag
+laser_geometry/
+rosbag_to_csv/
+velodyne/
 
 .vscode/*
