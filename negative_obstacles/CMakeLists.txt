@@ -147,7 +147,7 @@ include_directories(
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-add_executable(negative_obstacles src/gradient_publisher.cpp)
+add_executable(negative_obstacles src/negative_obstacles.cpp)
 #add_executable(assem src/assemble.cpp)
 # add_executable()
 #add_dependencies(negative_obstacles ${PROJECT_NAME}_gencfg)

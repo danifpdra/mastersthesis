@@ -177,14 +177,17 @@ void NegObstc::spatial_segmentation()
 
   pcl_ros::transformPointCloud("moving_axis", ros::Time(0), *Cloud_Reconst, "map", *Transformed_cloud,
                                NegObstc::listener);
-  for (pcl::PointCloud<pcl::PointXYZRGB>::iterator cloud_it = Transformed_cloud->points.begin(); cloud_it < Transformed_cloud->points.end();
-       ++cloud_it)
+  for (pcl::PointCloud<pcl::PointXYZRGB>::iterator cloud_it = Transformed_cloud->points.begin();
+       cloud_it < Transformed_cloud->points.end(); ++cloud_it)
   {
-    lin = ceil(cloud_it.x / pace);
-    col = ceil(cloud_it.y / pace);
+    if (cloud_it.x <= 40 && cloud_it >= 0 && cloud_it.y >= -20 && cloud_it <= 20)
+    {
+      lin = ceil(cloud_it.x / pace);
+      col = ceil(cloud_it.y / pace);
 
-    matriz[lin][col]++;
-    data_points[lin+col*nl]++;
+      matriz[lin][col]++;
+      data_points[lin + col * nl]++;
+    }
   }
 
   newGrid.header = header;
