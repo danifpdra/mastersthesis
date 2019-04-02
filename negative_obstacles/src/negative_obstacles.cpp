@@ -132,16 +132,16 @@ void NegObstc::spatial_segmentation()
   density_points.resize(N);
 
   grad_points.clear();
-  grad_points.resize((nc-1)*(nl-1));
+  grad_points.resize((nc - 1) * (nl - 1));
 
   grad_x_points.clear();
-  grad_x_points.resize((nc-1)*(nl-1));
+  grad_x_points.resize((nc - 1) * (nl - 1));
 
   grad_y_points.clear();
-  grad_y_points.resize((nc-1)*(nl-1));
+  grad_y_points.resize((nc - 1) * (nl - 1));
 
   grad_dir_points.clear();
-  grad_dir_points.resize((nc-1)*(nl-1));
+  grad_dir_points.resize((nc - 1) * (nl - 1));
 
   /*initalizing messages for OccupancyGrid construction*/
   info.height = nc;
@@ -208,47 +208,48 @@ void NegObstc::spatial_segmentation()
           atan2(static_cast<double>(grad[l][c].horizontal), static_cast<double>(grad[l][c].vertical));
 
       /*Gx*/
-      if (grad[l][c].vertical > 100)
+      // grad_x_points[j] = grad[l][c].vertical;
+      if (grad[l][c].vertical > 100 * pace)
       {
         grad_x_points[j] = 100;
       }
-      else if (grad[l][c].vertical >= 80 && grad[l][c].vertical < 100)
+      else if (grad[l][c].vertical >= 80 * pace && grad[l][c].vertical < 100 * pace)
       {
         grad_x_points[j] = 80;
       }
-      else if (grad[l][c].vertical >= 60 && grad[l][c].vertical < 80)
+      else if (grad[l][c].vertical >= 60 * pace && grad[l][c].vertical < 80 * pace)
       {
         grad_x_points[j] = 60;
       }
-      else if (grad[l][c].vertical >= 40 && grad[l][c].vertical < 60)
+      else if (grad[l][c].vertical >= 40 * pace && grad[l][c].vertical < 60 * pace)
       {
         grad_x_points[j] = 40;
       }
-      else if (grad[l][c].vertical >= 20 && grad[l][c].vertical < 40)
+      else if (grad[l][c].vertical >= 20 * pace && grad[l][c].vertical < 40 * pace)
       {
         grad_x_points[j] = 20;
       }
-      else if (grad[l][c].vertical >= 0 && grad[l][c].vertical < 20)
+      else if (grad[l][c].vertical >= 0 * pace && grad[l][c].vertical < 20 * pace)
       {
         grad_x_points[j] = 0;
       }
-      else if (grad[l][c].vertical >= -20 && grad[l][c].vertical < 0)
+      else if (grad[l][c].vertical >= -20 * pace && grad[l][c].vertical < 0)
       {
         grad_x_points[j] = 20;
       }
-      else if (grad[l][c].vertical >= -40 && grad[l][c].vertical < -20)
+      else if (grad[l][c].vertical >= -40 * pace && grad[l][c].vertical < -20 * pace)
       {
         grad_x_points[j] = 40;
       }
-      else if (grad[l][c].vertical >= -60 && grad[l][c].vertical < -40)
+      else if (grad[l][c].vertical >= -60 * pace && grad[l][c].vertical < -40 * pace)
       {
         grad_x_points[j] = 60;
       }
-      else if (grad[l][c].vertical >= -80 && grad[l][c].vertical < -60)
+      else if (grad[l][c].vertical >= -80 * pace && grad[l][c].vertical < -60 * pace)
       {
         grad_x_points[j] = 80;
       }
-      else if (grad[l][c].vertical < -80)
+      else if (grad[l][c].vertical < -80 * pace)
       {
         grad_x_points[j] = 100;
       }
@@ -258,47 +259,47 @@ void NegObstc::spatial_segmentation()
       }
 
       /*Gy*/
-      if (grad[l][c].horizontal > 100)
+      if (grad[l][c].horizontal > 100 * pace)
       {
         grad_y_points[j] = 100;
       }
-      else if (grad[l][c].horizontal >= 80 && grad[l][c].horizontal < 100)
+      else if (grad[l][c].horizontal >= 80 * pace && grad[l][c].horizontal < 100 * pace)
       {
         grad_y_points[j] = 80;
       }
-      else if (grad[l][c].horizontal >= 60 && grad[l][c].horizontal < 80)
+      else if (grad[l][c].horizontal >= 60 * pace && grad[l][c].horizontal < 80 * pace)
       {
         grad_y_points[j] = 60;
       }
-      else if (grad[l][c].horizontal >= 40 && grad[l][c].horizontal < 60)
+      else if (grad[l][c].horizontal >= 40 * pace && grad[l][c].horizontal < 60 * pace)
       {
         grad_y_points[j] = 40;
       }
-      else if (grad[l][c].horizontal >= 20 && grad[l][c].horizontal < 40)
+      else if (grad[l][c].horizontal >= 20 * pace && grad[l][c].horizontal < 40 * pace)
       {
         grad_y_points[j] = 20;
       }
-      else if (grad[l][c].horizontal >= 0 && grad[l][c].horizontal < 20)
+      else if (grad[l][c].horizontal >= 0 && grad[l][c].horizontal < 20 * pace)
       {
         grad_y_points[j] = 0;
       }
-      else if (grad[l][c].horizontal >= -20 && grad[l][c].horizontal < 0)
+      else if (grad[l][c].horizontal >= -20 * pace && grad[l][c].horizontal < 0)
       {
         grad_y_points[j] = 20;
       }
-      else if (grad[l][c].horizontal >= -40 && grad[l][c].horizontal < -20)
+      else if (grad[l][c].horizontal >= -40 * pace && grad[l][c].horizontal < -20 * pace)
       {
         grad_y_points[j] = 40;
       }
-      else if (grad[l][c].horizontal >= -60 && grad[l][c].horizontal < -40)
+      else if (grad[l][c].horizontal >= -60 * pace && grad[l][c].horizontal < -40 * pace)
       {
         grad_y_points[j] = 60;
       }
-      else if (grad[l][c].horizontal >= -80 && grad[l][c].horizontal < -60)
+      else if (grad[l][c].horizontal >= -80 * pace && grad[l][c].horizontal < -60 * pace)
       {
         grad_y_points[j] = 80;
       }
-      else if (grad[l][c].horizontal < -80)
+      else if (grad[l][c].horizontal < -80 * pace)
       {
         grad_y_points[j] = 100;
       }
@@ -309,47 +310,47 @@ void NegObstc::spatial_segmentation()
 
       /*G*/
 
-      if (grad[l][c].grad_tot > 200)
+      if (grad[l][c].grad_tot > 200 * pace)
       {
         grad_points[j] = 100;
       }
-      else if (grad[l][c].grad_tot >= 180 && grad[l][c].grad_tot < 200)
+      else if (grad[l][c].grad_tot >= 180 * pace && grad[l][c].grad_tot < 200 * pace)
       {
         grad_points[j] = 80;
       }
-      else if (grad[l][c].grad_tot >= 160 && grad[l][c].grad_tot < 180)
+      else if (grad[l][c].grad_tot >= 160 * pace && grad[l][c].grad_tot < 180 * pace)
       {
         grad_points[j] = 60;
       }
-      else if (grad[l][c].grad_tot >= 140 && grad[l][c].grad_tot < 160)
+      else if (grad[l][c].grad_tot >= 140 * pace && grad[l][c].grad_tot < 160 * pace)
       {
         grad_points[j] = 40;
       }
-      else if (grad[l][c].grad_tot >= 120 && grad[l][c].grad_tot < 140)
+      else if (grad[l][c].grad_tot >= 120 * pace && grad[l][c].grad_tot < 140 * pace)
       {
         grad_points[j] = 20;
       }
-      else if (grad[l][c].grad_tot >= 100 && grad[l][c].grad_tot < 120)
+      else if (grad[l][c].grad_tot >= 100 * pace && grad[l][c].grad_tot < 120 * pace)
       {
         grad_points[j] = 0;
       }
-      else if (grad[l][c].grad_tot >= 80 && grad[l][c].grad_tot < 100)
+      else if (grad[l][c].grad_tot >= 80 * pace && grad[l][c].grad_tot < 100 * pace)
       {
         grad_points[j] = 20;
       }
-      else if (grad[l][c].grad_tot >= 60 && grad[l][c].grad_tot < 80)
+      else if (grad[l][c].grad_tot >= 60 * pace && grad[l][c].grad_tot < 80 * pace)
       {
         grad_points[j] = 40;
       }
-      else if (grad[l][c].grad_tot >= 40 && grad[l][c].grad_tot < 60)
+      else if (grad[l][c].grad_tot >= 40 * pace && grad[l][c].grad_tot < 60 * pace)
       {
         grad_points[j] = 60;
       }
-      else if (grad[l][c].grad_tot >= 20 && grad[l][c].grad_tot < 40)
+      else if (grad[l][c].grad_tot >= 20 * pace && grad[l][c].grad_tot < 40 * pace)
       {
         grad_points[j] = 80;
       }
-      else if (grad[l][c].grad_tot < 20)
+      else if (grad[l][c].grad_tot < 20 * pace)
       {
         grad_points[j] = 100;
       }
