@@ -69,7 +69,7 @@ private:
   tf::TransformListener listener;
   /*messages*/
   std_msgs::Header header;
-  nav_msgs::MapMetaData info;
+  nav_msgs::MapMetaData info, info_grad;
   nav_msgs::OccupancyGrid densityGrid, gradGrid, gradXGrid, gradYGrid, gradDirGrid;
 
   void spatial_segmentation();
@@ -109,11 +109,6 @@ void NegObstc::loop_function()
   if (Cloud_check_size.points.size() != 0)
   {
     spatial_segmentation();
-    densityGrid.data = density_points;
-    densityGrid.data = grad_points;
-    densityGrid.data = grad_x_points;
-    densityGrid.data = grad_y_points;
-    densityGrid.data = grad_dir_points;
 
     map_pub.publish(densityGrid);
     grad_pub.publish(gradGrid);
@@ -137,32 +132,36 @@ void NegObstc::spatial_segmentation()
   density_points.resize(N);
 
   grad_points.clear();
-  grad_points.resize(N);
+  grad_points.resize((nc-1)*(nl-1));
 
   grad_x_points.clear();
-  grad_x_points.resize(N);
+  grad_x_points.resize((nc-1)*(nl-1));
 
   grad_y_points.clear();
-  grad_y_points.resize(N);
+  grad_y_points.resize((nc-1)*(nl-1));
 
   grad_dir_points.clear();
-  grad_dir_points.resize(N);
+  grad_dir_points.resize((nc-1)*(nl-1));
 
   /*initalizing messages for OccupancyGrid construction*/
   info.height = nc;
   info.width = nl;
-  info.resolution = pace;
+  info_grad.height = nc - 1;
+  info_grad.width = nl - 1;
+  info.resolution = info_grad.resolution = pace;
   header.frame_id = "moving_axis";
   info.map_load_time = header.stamp = ros::Time(0);
-  info.origin.position.x = 0;
-  info.origin.position.y = -20;
-  info.origin.position.z = 0;
-  info.origin.orientation.x = 0;
-  info.origin.orientation.y = 0;
-  info.origin.orientation.z = 0;
+  info.origin.position.x = info_grad.origin.position.x = 0;
+  info.origin.position.y = info_grad.origin.position.y = -20;
+  info.origin.position.z = info_grad.origin.position.z = 0;
+  info.origin.orientation.x = info_grad.origin.orientation.x = 0;
+  info.origin.orientation.y = info_grad.origin.orientation.y = 0;
+  info.origin.orientation.z = info_grad.origin.orientation.z = 0;
 
-  densityGrid.header = header;
+  /*initializing grids with constructed messages*/
+  densityGrid.header = gradGrid.header = gradXGrid.header = gradYGrid.header = gradDirGrid.header = header;
   densityGrid.info = info;
+  gradGrid.info = gradXGrid.info = gradYGrid.info = gradDirGrid.info = info_grad;
 
   /*initialize matrix to save density*/
   densityMatrix.resize(nl, nc);
@@ -186,15 +185,17 @@ void NegObstc::spatial_segmentation()
       if (lin < nl && col < nc)
         densityMatrix(lin, col) += 1;
       if (lin + col * nl < N)
-        density_points[lin + col * nl] += 3;
+        density_points[lin + col * nl] += 2;
     }
   }
 
+  densityGrid.data = density_points;
+
   // calculate gradient matrix
   j = 0;
-  for (int l = 0; l < nl - 1; l++)
+  for (int c = 0; c < nc - 1; c++)
   {
-    for (int c = 0; c < nc - 1; c++)
+    for (int l = 0; l < nl - 1; l++)
     {
       grad[l][c].vertical = densityMatrix(l + 1, c) - densityMatrix(l, c);
       grad[l][c].horizontal = densityMatrix(l, c + 1) - densityMatrix(l, c);
@@ -299,7 +300,7 @@ void NegObstc::spatial_segmentation()
       }
       else if (grad[l][c].horizontal < -80)
       {
-        grad_y_points[j] = = 100;
+        grad_y_points[j] = 100;
       }
       else
       {
@@ -350,7 +351,7 @@ void NegObstc::spatial_segmentation()
       }
       else if (grad[l][c].grad_tot < 20)
       {
-        grad_points[j] = = 100;
+        grad_points[j] = 100;
       }
       else
       {
@@ -400,7 +401,7 @@ void NegObstc::spatial_segmentation()
       }
       else if (grad[l][c].direction < -M_PI)
       {
-        grad_dir_points[j] = = 100;
+        grad_dir_points[j] = 100;
       }
       else
       {
@@ -413,6 +414,11 @@ void NegObstc::spatial_segmentation()
       j++;
     }
   }
+
+  gradGrid.data = grad_points;
+  gradXGrid.data = grad_x_points;
+  gradYGrid.data = grad_y_points;
+  gradDirGrid.data = grad_dir_points;
 }
 
 /**
