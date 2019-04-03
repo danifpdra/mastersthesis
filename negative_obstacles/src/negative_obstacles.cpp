@@ -44,21 +44,23 @@ private:
   pcl::PointCloud<pcl::PointXYZ> Cloud_check_size;
   /*others*/
   double pace;
-  int N, i, j, writeCount, lin, col, nc, nl;
+  float max;
+  int N, j, s, writeCount, lin, col, nc, nl, ls, cs;
   Eigen::MatrixXd densityMatrix;
-  color color_grad, color_grad_x, color_grad_y, color_grad_d;
-  std::vector<signed char> density_points, grad_points, grad_x_points, grad_y_points, grad_dir_points;
+  Eigen::Index maxRow, maxCol;
+  std::vector<signed char> density_points, grad_points, grad_x_points, grad_y_points, grad_dir_points, sobel_gx_points,
+      sobel_gy_points, sobel_points;
 
   /*publishers and subscribers*/
   ros::Subscriber sub;
   ros::Publisher marker_pub;
-  ros::Publisher map_pub, grad_pub, grad_x_pub, grad_y_pub, grad_dir_pub;
+  ros::Publisher density_pub, grad_pub, grad_x_pub, grad_y_pub, grad_dir_pub, sobel_gx_pub, sobel_gy_pub, sobel_pub;
   tf::StampedTransform transform;
   tf::TransformListener listener;
   /*messages*/
   std_msgs::Header header;
-  nav_msgs::MapMetaData info, info_grad;
-  nav_msgs::OccupancyGrid densityGrid, gradGrid, gradXGrid, gradYGrid, gradDirGrid;
+  nav_msgs::MapMetaData info, info_grad, info_sobel;
+  nav_msgs::OccupancyGrid densityGrid, gradGrid, gradXGrid, gradYGrid, gradDirGrid, sobelGxGrid, sobelGyGrid, sobelGrid;
 
   void spatial_segmentation();
 
@@ -75,11 +77,17 @@ private:
 NegObstc::NegObstc()
 {
   /*publishers and subscribers*/
-  map_pub = nh_.advertise<nav_msgs::OccupancyGrid>("map_pub", 1, true);
+  density_pub = nh_.advertise<nav_msgs::OccupancyGrid>("density_pub", 1, true);
+
   grad_pub = nh_.advertise<nav_msgs::OccupancyGrid>("grad_pub", 1, true);
   grad_x_pub = nh_.advertise<nav_msgs::OccupancyGrid>("grad_x_pub", 1, true);
   grad_y_pub = nh_.advertise<nav_msgs::OccupancyGrid>("grad_y_pub", 1, true);
   grad_dir_pub = nh_.advertise<nav_msgs::OccupancyGrid>("grad_dir_pub", 1, true);
+
+  sobel_pub = nh_.advertise<nav_msgs::OccupancyGrid>("sobel_pub", 1, true);
+  sobel_gx_pub = nh_.advertise<nav_msgs::OccupancyGrid>("sobel_gx_pub", 1, true);
+  sobel_gy_pub = nh_.advertise<nav_msgs::OccupancyGrid>("sobel_gy_pub", 1, true);
+
   sub = nh_.subscribe<sensor_msgs::PointCloud2>("/road_reconstruction", 1, &NegObstc::GetPointCloud, this);
 
   /*initialize pointers*/
@@ -98,11 +106,15 @@ void NegObstc::loop_function()
   {
     spatial_segmentation();
 
-    map_pub.publish(densityGrid);
+    density_pub.publish(densityGrid);
     grad_pub.publish(gradGrid);
     grad_x_pub.publish(gradXGrid);
     grad_y_pub.publish(gradYGrid);
     grad_dir_pub.publish(gradDirGrid);
+
+    sobel_pub.publish(sobelGxGrid);
+    sobel_gx_pub.publish(sobelGyGrid);
+    sobel_gy_pub.publish(sobelGrid);
   }
 }
 
@@ -112,8 +124,7 @@ void NegObstc::spatial_segmentation()
   nl = 40 / pace;
   nc = 40 / pace;
   N = nc * nl;
-  i = j = 0;
-  lin = col = 0;
+  j = s = lin = col = 0;
 
   /*clearing grid data*/
   density_points.clear();
@@ -121,35 +132,43 @@ void NegObstc::spatial_segmentation()
 
   grad_points.clear();
   grad_points.resize((nc - 1) * (nl - 1));
-
   grad_x_points.clear();
   grad_x_points.resize((nc - 1) * (nl - 1));
-
   grad_y_points.clear();
   grad_y_points.resize((nc - 1) * (nl - 1));
-
   grad_dir_points.clear();
   grad_dir_points.resize((nc - 1) * (nl - 1));
+
+  sobel_points.clear();
+  sobel_points.resize((nc - 2) * (nl - 2));
+  sobel_gx_points.clear();
+  sobel_gx_points.resize((nc - 2) * (nl - 2));
+  sobel_gy_points.clear();
+  sobel_gy_points.resize((nc - 2) * (nl - 2));
 
   /*initalizing messages for OccupancyGrid construction*/
   info.height = nc;
   info.width = nl;
   info_grad.height = nc - 1;
   info_grad.width = nl - 1;
-  info.resolution = info_grad.resolution = pace;
+  info_sobel.height = nc - 2;
+  info_sobel.width = nl - 2;
+  info.resolution = info_grad.resolution = info_sobel.resolution = pace;
   header.frame_id = "moving_axis";
-  info.map_load_time = header.stamp = ros::Time(0);
-  info.origin.position.x = info_grad.origin.position.x = 0;
-  info.origin.position.y = info_grad.origin.position.y = -20;
-  info.origin.position.z = info_grad.origin.position.z = 0;
-  info.origin.orientation.x = info_grad.origin.orientation.x = 0;
-  info.origin.orientation.y = info_grad.origin.orientation.y = 0;
-  info.origin.orientation.z = info_grad.origin.orientation.z = 0;
+  info.map_load_time = header.stamp = info_grad.map_load_time = info_sobel.map_load_time = ros::Time(0);
+  info.origin.position.x = info_grad.origin.position.x = info_sobel.origin.position.x = 0;
+  info.origin.position.y = info_grad.origin.position.y = info_sobel.origin.position.y = -20;
+  info.origin.position.z = info_grad.origin.position.z = info_sobel.origin.position.z = 0;
+  info.origin.orientation.x = info_grad.origin.orientation.x = info_sobel.origin.orientation.x = 0;
+  info.origin.orientation.y = info_grad.origin.orientation.y = info_sobel.origin.orientation.y = 0;
+  info.origin.orientation.z = info_grad.origin.orientation.z = info_sobel.origin.orientation.z = 0;
 
   /*initializing grids with constructed messages*/
-  densityGrid.header = gradGrid.header = gradXGrid.header = gradYGrid.header = gradDirGrid.header = header;
+  densityGrid.header = gradGrid.header = gradXGrid.header = gradYGrid.header = gradDirGrid.header = sobelGrid.header =
+      sobelGxGrid.header = sobelGyGrid.header = header;
   densityGrid.info = info;
   gradGrid.info = gradXGrid.info = gradYGrid.info = gradDirGrid.info = info_grad;
+  sobelGrid.info = sobelGxGrid.info = sobelGyGrid.info = info_sobel;
 
   /*initialize matrix to save density*/
   densityMatrix.resize(nl, nc);
@@ -157,6 +176,7 @@ void NegObstc::spatial_segmentation()
 
   /*cubelist marker with gradient colorbar*/
   gradient_2d grad[nc - 1][nl - 1];
+  sobel_grad sobel_grad[nc - 2][nl - 2];
 
   pcl_ros::transformPointCloud("moving_axis", ros::Time(0), *Cloud_Reconst, "map", *Transformed_cloud,
                                NegObstc::listener);
@@ -178,9 +198,9 @@ void NegObstc::spatial_segmentation()
   }
 
   densityGrid.data = density_points;
+  max = densityMatrix.maxCoeff(&maxRow, &maxCol);
 
   // calculate gradient matrix
-  j = 0;
   for (int c = 0; c < nc - 1; c++)
   {
     for (int l = 0; l < nl - 1; l++)
@@ -195,111 +215,37 @@ void NegObstc::spatial_segmentation()
       grad[l][c].direction =
           atan2(static_cast<double>(grad[l][c].horizontal), static_cast<double>(grad[l][c].vertical));
 
-      /*Gx*/
-      // grad_x_points[j] = grad[l][c].vertical;
-      if (grad[l][c].vertical > 100 * pace)
-        grad_x_points[j] = 100;
-      else if (grad[l][c].vertical >= 80 * pace && grad[l][c].vertical < 100 * pace)
-        grad_x_points[j] = 50;
-      else if (grad[l][c].vertical >= 60 * pace && grad[l][c].vertical < 80 * pace)
-        grad_x_points[j] = 40;
-      else if (grad[l][c].vertical >= 40 * pace && grad[l][c].vertical < 60 * pace)
-        grad_x_points[j] = 30;
-      else if (grad[l][c].vertical >= 20 * pace && grad[l][c].vertical < 40 * pace)
-        grad_x_points[j] = 15;
-      else if (grad[l][c].vertical >= 0 * pace && grad[l][c].vertical < 20 * pace)
-        grad_x_points[j] = 0;
-      else if (grad[l][c].vertical >= -20 * pace && grad[l][c].vertical < 0)
-        grad_x_points[j] = 15;
-      else if (grad[l][c].vertical >= -40 * pace && grad[l][c].vertical < -20 * pace)
-        grad_x_points[j] = 30;
-      else if (grad[l][c].vertical >= -60 * pace && grad[l][c].vertical < -40 * pace)
-        grad_x_points[j] = 40;
-      else if (grad[l][c].vertical >= -80 * pace && grad[l][c].vertical < -60 * pace)
-        grad_x_points[j] = 50;
-      else if (grad[l][c].vertical < -80 * pace)
-        grad_x_points[j] = 100;
-      else
-        grad_x_points[j] = 0;
+      if (c < nc - 2 && l < nl - 2)
+      {
+        ls = l + 1;
+        cs = c + 1;
+        sobel_grad[ls][cs].sobel_gx = (-1) * densityMatrix(ls + 1, cs - 1) - 2 * densityMatrix(ls, cs - 1) -
+                                      densityMatrix(ls - 1, cs - 1) + densityMatrix(ls + 1, cs + 1) +
+                                      2 * densityMatrix(ls, cs + 1) + densityMatrix(ls - 1, cs + 1);
+        sobel_grad[ls][cs].sobel_gy = (-1) * densityMatrix(ls - 1, cs - 1) - 2 * densityMatrix(ls - 1) -
+                                      densityMatrix(ls - 1, cs + 1) + densityMatrix(ls + 1, cs - 1) +
+                                      2 * densityMatrix(ls + 1, cs) + densityMatrix(ls + 1, cs + 1);
 
-      /*Gy*/
-      if (grad[l][c].horizontal > 100 * pace)
-        grad_y_points[j] = 100;
-      else if (grad[l][c].horizontal >= 80 * pace && grad[l][c].horizontal < 100 * pace)
-        grad_y_points[j] = 50;
-      else if (grad[l][c].horizontal >= 60 * pace && grad[l][c].horizontal < 80 * pace)
-        grad_y_points[j] = 40;
-      else if (grad[l][c].horizontal >= 40 * pace && grad[l][c].horizontal < 60 * pace)
-        grad_y_points[j] = 30;
-      else if (grad[l][c].horizontal >= 20 * pace && grad[l][c].horizontal < 40 * pace)
-        grad_y_points[j] = 15;
-      else if (grad[l][c].horizontal >= 0 && grad[l][c].horizontal < 20 * pace)
-        grad_y_points[j] = 0;
-      else if (grad[l][c].horizontal >= -20 * pace && grad[l][c].horizontal < 0)
-        grad_y_points[j] = 15;
-      else if (grad[l][c].horizontal >= -40 * pace && grad[l][c].horizontal < -20 * pace)
-        grad_y_points[j] = 30;
-      else if (grad[l][c].horizontal >= -60 * pace && grad[l][c].horizontal < -40 * pace)
-        grad_y_points[j] = 40;
-      else if (grad[l][c].horizontal >= -80 * pace && grad[l][c].horizontal < -60 * pace)
-        grad_y_points[j] = 50;
-      else if (grad[l][c].horizontal < -80 * pace)
-        grad_y_points[j] = 100;
-      else
-        grad_y_points[j] = 0;
+        sobel_grad[ls][cs].sobel = abs(sobel_grad[ls][cs].sobel_gx) + abs(sobel_grad[ls][cs].sobel_gy);
 
-      /*G*/
-      if (grad[l][c].grad_tot > 200 * pace)
-        grad_points[j] = 100;
-      else if (grad[l][c].grad_tot >= 180 * pace && grad[l][c].grad_tot < 200 * pace)
-        grad_points[j] = 90;
-      else if (grad[l][c].grad_tot >= 160 * pace && grad[l][c].grad_tot < 180 * pace)
-        grad_points[j] = 80;
-      else if (grad[l][c].grad_tot >= 140 * pace && grad[l][c].grad_tot < 160 * pace)
-        grad_points[j] = 70;
-      else if (grad[l][c].grad_tot >= 120 * pace && grad[l][c].grad_tot < 140 * pace)
-        grad_points[j] = 60;
-      else if (grad[l][c].grad_tot >= 100 * pace && grad[l][c].grad_tot < 120 * pace)
-        grad_points[j] = 50;
-      else if (grad[l][c].grad_tot >= 80 * pace && grad[l][c].grad_tot < 100 * pace)
-        grad_points[j] = 40;
-      else if (grad[l][c].grad_tot >= 60 * pace && grad[l][c].grad_tot < 80 * pace)
-        grad_points[j] = 30;
-      else if (grad[l][c].grad_tot >= 40 * pace && grad[l][c].grad_tot < 60 * pace)
-        grad_points[j] = 20;
-      else if (grad[l][c].grad_tot >= 20 * pace && grad[l][c].grad_tot < 40 * pace)
-        grad_points[j] = 10;
-      else if (grad[l][c].grad_tot < 20 * pace)
-        grad_points[j] = 5;
-      else
-        grad_points[j] = 0;
+        if (sobel_grad[ls][cs].sobel != 0)
+          ROS_WARN("Gx=%f, Gy=%f, G=%f", sobel_grad[ls][cs].sobel_gx, sobel_grad[ls][cs].sobel_gy,
+                   sobel_grad[ls][cs].sobel);
 
-      /*Gradient direction*/
-      if (grad[l][c].direction > M_PI)
-        grad_dir_points[j] = 100;
-      else if (grad[l][c].direction >= (4 / 5) * M_PI && grad[l][c].direction < M_PI)
-        grad_dir_points[j] = 50;
-      else if (grad[l][c].direction >= (3 / 5) * M_PI && grad[l][c].direction < (4 / 5) * M_PI)
-        grad_dir_points[j] = 40;
-      else if (grad[l][c].direction >= (2 / 5) * M_PI && grad[l][c].direction < (3 / 5) * M_PI)
-        grad_dir_points[j] = 30;
-      else if (grad[l][c].direction >= (1 / 5) * M_PI && grad[l][c].direction < (2 / 5) * M_PI)
-        grad_dir_points[j] = 15;
-      else if (grad[l][c].direction >= 0 && grad[l][c].direction < (1 / 5) * M_PI)
-        grad_dir_points[j] = 0;
-      else if (grad[l][c].direction >= -(2 / 5) * M_PI && grad[l][c].direction < -(1 / 5) * M_PI)
-        grad_dir_points[j] = 15;
-      else if (grad[l][c].direction >= -(3 / 5) * M_PI && grad[l][c].direction < -(2 / 5) * M_PI)
-        grad_dir_points[j] = 30;
-      else if (grad[l][c].direction >= -(4 / 5) * M_PI && grad[l][c].direction < -(3 / 5) * M_PI)
-        grad_dir_points[j] = 40;
-      else if (grad[l][c].direction >= -M_PI && grad[l][c].direction < -(4 / 5) * M_PI)
-        grad_dir_points[j] = 50;
-      else if (grad[l][c].direction < -M_PI)
-        grad_dir_points[j] = 100;
-      else
-        grad_dir_points[j] = 0;
+        // sobel_gx_points[s] = Sobel1D(sobel_grad[ls][cs].sobel_gx, pace);
+        // sobel_gy_points[s] = Sobel1D(sobel_grad[ls][cs].sobel_gy, pace);
+        // sobel_points[s] = SobelMag(sobel_grad[ls][cs].sobel, pace);
 
+        sobel_gx_points[s] = abs(sobel_grad[ls][cs].sobel_gx) / (2 * max) * 100;
+        sobel_gy_points[s] = abs(sobel_grad[ls][cs].sobel_gy) / (2 * max) * 100;
+        sobel_points[s] = sobel_grad[ls][cs].sobel / (4 * max) * 100;
+        s++;
+      }
+
+      grad_points[j] = Grad1D(grad[l][c].grad_tot, pace);
+      grad_x_points[j] = Grad1D(grad[l][c].vertical, pace);
+      grad_y_points[j] = GradMag(grad[l][c].horizontal, pace);
+      grad_dir_points[j] = GradDir(grad[l][c].direction, pace);
       // ROS_WARN("Levels: Gx=%d, Gy=%d, G=%d, theta=%d", grad_x_points[j], grad_y_points[j], grad_points[j],
       // grad_dir_points[j]);
 
@@ -311,6 +257,10 @@ void NegObstc::spatial_segmentation()
   gradXGrid.data = grad_x_points;
   gradYGrid.data = grad_y_points;
   gradDirGrid.data = grad_dir_points;
+
+  sobelGrid.data = sobel_points;
+  sobelGxGrid.data = sobel_gx_points;
+  sobelGyGrid.data = sobel_gy_points;
 }
 
 /**

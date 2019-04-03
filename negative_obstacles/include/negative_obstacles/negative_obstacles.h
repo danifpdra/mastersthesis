@@ -46,6 +46,13 @@ struct gradient_2d
   double direction;
 };
 
+struct sobel_grad
+{
+  double sobel_gx;
+  double sobel_gy;
+  double sobel;
+};
+
 struct color
 {
   double r;
@@ -121,4 +128,174 @@ color colorbar(int level)
   }
 
   return color_rgb;
+}
+
+/*Gx sobel*/
+int Sobel1D(int G, int pace)
+{
+  int level;
+  if (G > 1000 * pace)
+    level = 100;
+  else if (G >= 800 * pace && G < 1000 * pace)
+    level = 80;
+  else if (G >= 600 * pace && G < 800 * pace)
+    level = 60;
+  else if (G >= 500 * pace && G < 600 * pace)
+    level = 50;
+  else if (G >= 400 * pace && G < 500 * pace)
+    level = 40;
+  else if (G >= 200 * pace && G < 400 * pace)
+    level = 30;
+  else if (G >= 100 * pace && G < 200 * pace)
+    level = 15;
+  else if (G >= 0  && G < 100 * pace)
+    level = 0;
+  else if (G >= -100 * pace && G < 0)
+    level = 0;
+  else if (G >= -200 * pace && G < -100 * pace)
+    level = 15;
+  else if (G >= -400 * pace && G < -200 * pace)
+    level = 30;
+  else if (G >= -500 * pace && G < -400 * pace)
+    level = 40;
+  else if (G >= -600 * pace && G < -500 * pace)
+    level = 50;
+  else if (G >= -800 * pace && G < -600 * pace)
+    level = 60;
+  else if (G >= -800 * pace && G < -1000 * pace)
+    level = 80;
+  else if (G < -1000 * pace)
+    level = 100;
+  else
+    level = 0;
+
+  return level;
+}
+
+/*Sobel magnitude*/
+int SobelMag(int G, int pace)
+{
+  int level;
+  if (G > 4000 * pace)
+    level = 100;
+  else if (G >= 3000 * pace && G < 4000 * pace)
+    level = 90;
+  else if (G >= 2000 * pace && G < 3000 * pace)
+    level = 80;
+  else if (G >= 1000 * pace && G < 2000 * pace)
+    level = 70;
+  else if (G >= 750 * pace && G < 1000 * pace)
+    level = 60;
+  else if (G >= 500 * pace && G < 750 * pace)
+    level = 50;
+  else if (G >= 400 * pace && G < 500 * pace)
+    level = 40;
+  else if (G >= 200 * pace && G < 400 * pace)
+    level = 30;
+  else if (G >= 100 * pace && G < 200 * pace)
+    level = 20;
+  else if (G >= 20 * pace && G < 100 * pace)
+    level = 10;
+  else if (G < 20 * pace)
+    level = 5;
+  else
+    level = 0;
+
+  return level;
+}
+
+/*Gx*/
+int Grad1D(int G, int pace)
+{
+  int level;
+  if (G > 100 * pace)
+    level = 100;
+  else if (G >= 80 * pace && G < 100 * pace)
+    level = 50;
+  else if (G >= 60 * pace && G < 80 * pace)
+    level = 40;
+  else if (G >= 40 * pace && G < 60 * pace)
+    level = 30;
+  else if (G >= 20 * pace && G < 40 * pace)
+    level = 15;
+  else if (G >= 0 * pace && G < 20 * pace)
+    level = 0;
+  else if (G >= -20 * pace && G < 0)
+    level = 15;
+  else if (G >= -40 * pace && G < -20 * pace)
+    level = 30;
+  else if (G >= -60 * pace && G < -40 * pace)
+    level = 40;
+  else if (G >= -80 * pace && G < -60 * pace)
+    level = 50;
+  else if (G < -80 * pace)
+    level = 100;
+  else
+    level = 0;
+
+  return level;
+}
+
+/*G*/
+int GradMag(int G, int pace)
+{
+  int level;
+  if (G > 200 * pace)
+    level = 100;
+  else if (G >= 180 * pace && G < 200 * pace)
+    level = 90;
+  else if (G >= 160 * pace && G < 180 * pace)
+    level = 80;
+  else if (G >= 140 * pace && G < 160 * pace)
+    level = 70;
+  else if (G >= 120 * pace && G < 140 * pace)
+    level = 60;
+  else if (G >= 100 * pace && G < 120 * pace)
+    level = 50;
+  else if (G >= 80 * pace && G < 100 * pace)
+    level = 40;
+  else if (G >= 60 * pace && G < 80 * pace)
+    level = 30;
+  else if (G >= 40 * pace && G < 60 * pace)
+    level = 20;
+  else if (G >= 20 * pace && G < 40 * pace)
+    level = 10;
+  else if (G < 20 * pace)
+    level = 5;
+  else
+    level = 0;
+
+  return level;
+}
+
+/*Gradient direction*/
+int GradDir(int G, int pace)
+{
+  int level;
+  if (G > M_PI)
+    level = 100;
+  else if (G >= (4 / 5) * M_PI && G < M_PI)
+    level = 50;
+  else if (G >= (3 / 5) * M_PI && G < (4 / 5) * M_PI)
+    level = 40;
+  else if (G >= (2 / 5) * M_PI && G < (3 / 5) * M_PI)
+    level = 30;
+  else if (G >= (1 / 5) * M_PI && G < (2 / 5) * M_PI)
+    level = 15;
+  else if (G >= 0 && G < (1 / 5) * M_PI)
+    level = 0;
+  else if (G >= -(2 / 5) * M_PI && G < -(1 / 5) * M_PI)
+    level = 15;
+  else if (G >= -(3 / 5) * M_PI && G < -(2 / 5) * M_PI)
+    level = 30;
+  else if (G >= -(4 / 5) * M_PI && G < -(3 / 5) * M_PI)
+    level = 40;
+  else if (G >= -M_PI && G < -(4 / 5) * M_PI)
+    level = 50;
+  else if (G < -M_PI)
+    level = 100;
+  else
+    level = 0;
+
+  return level;
 }
