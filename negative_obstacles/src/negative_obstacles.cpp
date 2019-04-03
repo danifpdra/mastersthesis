@@ -21,17 +21,6 @@
 #include <iostream>
 #include <vector>
 //---------------------
-
-/* RANSAC*/
-#include <pcl/ModelCoefficients.h>
-#include <pcl/common/transforms.h>
-#include <pcl/console/parse.h>
-#include <pcl/filters/crop_box.h>
-#include <pcl/io/pcd_io.h>
-#include <pcl/sample_consensus/method_types.h>
-#include <pcl/sample_consensus/model_types.h>
-#include <pcl/segmentation/sac_segmentation.h>
-
 #include <visualization_msgs/Marker.h>
 
 #include "nav_msgs/MapMetaData.h"
@@ -45,7 +34,6 @@ class NegObstc
 public:
   NegObstc();
   void loop_function();
-  // color colobar(int level);
 
 private:
   ros::NodeHandle nh_;
@@ -53,7 +41,7 @@ private:
   /*pcl*/
   pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Reconst;
   pcl::PointCloud<pcl::PointXYZ>::Ptr Transformed_cloud;
-  pcl::PointCloud<pcl::PointXYZ> Cloud_check_size, Cloud_inliers_to_save;
+  pcl::PointCloud<pcl::PointXYZ> Cloud_check_size;
   /*others*/
   double pace;
   int N, i, j, writeCount, lin, col, nc, nl;
