@@ -138,7 +138,7 @@ color colorbar(int level)
 }
 
 /*Gx sobel*/
-int Sobel1D(int G, int pace)
+int Sobel1D(int G, double pace)
 {
   int level;
   if (G > 1000 * pace)
@@ -180,7 +180,7 @@ int Sobel1D(int G, int pace)
 }
 
 /*Sobel magnitude*/
-int SobelMag(int G, int pace)
+int SobelMag(int G, double pace)
 {
   int level;
   if (G > 4000 * pace)
@@ -212,7 +212,7 @@ int SobelMag(int G, int pace)
 }
 
 /*Gx*/
-int Grad1D(int G, int pace)
+int Grad1D(int G, double pace)
 {
   int level;
   if (G > 100 * pace)
@@ -244,7 +244,7 @@ int Grad1D(int G, int pace)
 }
 
 /*G*/
-int GradMag(int G, int pace)
+int GradMag(int G, double pace)
 {
   int level;
   if (G > 200 * pace)
@@ -276,7 +276,7 @@ int GradMag(int G, int pace)
 }
 
 /*Gradient direction*/
-int GradDir(int G, int pace)
+int GradDir(int G, double pace)
 {
   int level;
   if (G > M_PI)

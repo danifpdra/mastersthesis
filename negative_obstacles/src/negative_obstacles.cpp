@@ -41,8 +41,6 @@ private:
 
   /*pcl*/
   pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Reconst, Transformed_cloud;
-  // pcl::PointCloud<pcl::PointXYZ>::Ptr smooth_cloud;
-  // pcl::filters::Convolution<pcl::PointXYZ, pcl::PointXYZ> convolution;
 
   /*others*/
   double pace;
@@ -50,23 +48,22 @@ private:
   int N, j, s, writeCount, lin, col, nc, nl, ls, cs;
   Eigen::MatrixXd densityMatrix;
   Eigen::Index maxRow, maxCol;
-  // Eigen::ArrayXf gaussian_kernel;
   std::vector<signed char> density_points, grad_points, grad_x_points, grad_y_points, grad_dir_points, sobel_gx_points,
-      sobel_gy_points, sobel_points;
+      sobel_gy_points, sobel_points, prewitt_points;
 
   /*publishers and subscribers*/
   ros::Subscriber sub;
   ros::Publisher pub_cloud, density_pub, grad_pub, grad_x_pub, grad_y_pub, grad_dir_pub, sobel_gx_pub, sobel_gy_pub,
-      sobel_pub;
+      sobel_pub, prewitt_pub;
   tf::StampedTransform transform;
   tf::TransformListener listener;
+
   /*messages*/
-  // sensor_msgs::PointCloud2 CloudMsg_smooth;
   std_msgs::Header header;
   nav_msgs::MapMetaData info, info_grad, info_sobel;
-  nav_msgs::OccupancyGrid densityGrid, gradGrid, gradXGrid, gradYGrid, gradDirGrid, sobelGxGrid, sobelGyGrid, sobelGrid;
+  nav_msgs::OccupancyGrid densityGrid, gradGrid, gradXGrid, gradYGrid, gradDirGrid, sobelGxGrid, sobelGyGrid, sobelGrid,
+      prewittGrid;
 
-  // void GaussianFilter();
   void spatial_segmentation();
 
   void GetPointCloud(const sensor_msgs::PointCloud2ConstPtr &cloud_msg)
@@ -95,12 +92,13 @@ NegObstc::NegObstc()
   sobel_gx_pub = nh_.advertise<nav_msgs::OccupancyGrid>("sobel_gx_pub", 1, true);
   sobel_gy_pub = nh_.advertise<nav_msgs::OccupancyGrid>("sobel_gy_pub", 1, true);
 
+  prewitt_pub = nh_.advertise<nav_msgs::OccupancyGrid>("prewitt_pub", 1, true);
+
   sub = nh_.subscribe<sensor_msgs::PointCloud2>("/road_reconstruction", 1, &NegObstc::GetPointCloud, this);
 
   /*initialize pointers*/
   Cloud_Reconst.reset(new pcl::PointCloud<pcl::PointXYZ>);
   Transformed_cloud.reset(new pcl::PointCloud<pcl::PointXYZ>());
-  // smooth_cloud.reset(new pcl::PointCloud<pcl::PointXYZ>());
 }
 
 /**
@@ -112,11 +110,6 @@ void NegObstc::loop_function()
   // Cloud_check_size = (*Cloud_Reconst);
   if (Cloud_Reconst->points.size() != 0)
   {
-    // GaussianFilter();
-
-    // pcl::toROSMsg(*smooth_cloud, CloudMsg_smooth);
-    // pub_cloud.publish(CloudMsg_smooth);
-
     spatial_segmentation();
 
     density_pub.publish(densityGrid);
@@ -125,26 +118,13 @@ void NegObstc::loop_function()
     grad_y_pub.publish(gradYGrid);
     grad_dir_pub.publish(gradDirGrid);
 
-    sobel_pub.publish(sobelGxGrid);
-    sobel_gx_pub.publish(sobelGyGrid);
-    sobel_gy_pub.publish(sobelGrid);
+    sobel_pub.publish(sobelGrid);
+    sobel_gx_pub.publish(sobelGxGrid);
+    sobel_gy_pub.publish(sobelGyGrid);
+
+    prewitt_pub.publish(prewittGrid);
   }
 }
-
-// void NegObstc::GaussianFilter()
-// {
-//   gaussian_kernel.resize(5);
-//   gaussian_kernel(0) = 1.f / 16;
-//   gaussian_kernel(1) = 1.f / 4;
-//   gaussian_kernel(2) = 3.f / 8;
-//   gaussian_kernel(3) = 1.f / 4;
-//   gaussian_kernel(4) = 1.f / 16;
-//   convolution.setBordersPolicy(pcl::filters::Convolution<pcl::PointXYZ, pcl::PointXYZ>::BORDERS_POLICY_IGNORE);
-//   convolution.setDistanceThreshold(0.1);
-//   convolution.setInputCloud(Transformed_cloud);
-//   convolution.setKernel(gaussian_kernel);
-//   convolution.convolve(*smooth_cloud);
-// }
 
 void NegObstc::spatial_segmentation()
 {
@@ -174,6 +154,9 @@ void NegObstc::spatial_segmentation()
   sobel_gy_points.clear();
   sobel_gy_points.resize((nc - 2) * (nl - 2));
 
+  prewitt_points.clear();
+  prewitt_points.resize((nc - 2) * (nl - 2));
+
   /*initalizing messages for OccupancyGrid construction*/
   info.height = nc;
   info.width = nl;
@@ -193,10 +176,10 @@ void NegObstc::spatial_segmentation()
 
   /*initializing grids with constructed messages*/
   densityGrid.header = gradGrid.header = gradXGrid.header = gradYGrid.header = gradDirGrid.header = sobelGrid.header =
-      sobelGxGrid.header = sobelGyGrid.header = header;
+      sobelGxGrid.header = sobelGyGrid.header = prewittGrid.header = header;
   densityGrid.info = info;
   gradGrid.info = gradXGrid.info = gradYGrid.info = gradDirGrid.info = info_grad;
-  sobelGrid.info = sobelGxGrid.info = sobelGyGrid.info = info_sobel;
+  sobelGrid.info = sobelGxGrid.info = sobelGyGrid.info = prewittGrid.info = info_sobel;
 
   /*initialize matrix to save density*/
   densityMatrix.resize(nl, nc);
@@ -205,12 +188,12 @@ void NegObstc::spatial_segmentation()
   /*cubelist marker with gradient colorbar*/
   gradient_2d grad[nc - 1][nl - 1];
   sobel_grad sobel_grad[nc - 2][nl - 2];
+  prewitt_grad prewitt_grad[nc - 2][nl - 2];
 
   pcl_ros::transformPointCloud("moving_axis", ros::Time(0), *Cloud_Reconst, "map", *Transformed_cloud,
                                NegObstc::listener);
 
-  // for (pcl::PointCloud<pcl::PointXYZ>::iterator cloud_it = Transformed_cloud->begin();
-  //  cloud_it != Transformed_cloud->end(); ++cloud_it)
+  /*point density calculation*/
   for (const pcl::PointXYZ &point : *Transformed_cloud)
   {
     if (point.x <= 40 && point.x >= 0 && point.y >= -20 && point.y <= 20)
@@ -235,9 +218,6 @@ void NegObstc::spatial_segmentation()
     {
       grad[l][c].vertical = densityMatrix(l + 1, c) - densityMatrix(l, c);
       grad[l][c].horizontal = densityMatrix(l, c + 1) - densityMatrix(l, c);
-      // grad[l][c].grad_tot =
-      //     sqrt(pow(static_cast<double>(grad[l][c].vertical), 2) + pow(static_cast<double>(grad[l][c].horizontal),
-      //     2));
       grad[l][c].grad_tot =
           abs(static_cast<double>(grad[l][c].vertical)) + abs(static_cast<double>(grad[l][c].horizontal));
       grad[l][c].direction =
@@ -256,6 +236,15 @@ void NegObstc::spatial_segmentation()
 
         sobel_grad[ls][cs].sobel = abs(sobel_grad[ls][cs].sobel_gx) + abs(sobel_grad[ls][cs].sobel_gy);
 
+        prewitt_grad[ls][cs].gx = (-1) * densityMatrix(ls + 1, cs - 1) - densityMatrix(ls, cs - 1) -
+                                  densityMatrix(ls - 1, cs - 1) + densityMatrix(ls + 1, cs + 1) +
+                                  densityMatrix(ls, cs + 1) + densityMatrix(ls - 1, cs + 1);
+        prewitt_grad[ls][cs].gy = (-1) * densityMatrix(ls - 1, cs - 1) - densityMatrix(ls - 1) -
+                                  densityMatrix(ls - 1, cs + 1) + densityMatrix(ls + 1, cs - 1) +
+                                  densityMatrix(ls + 1, cs) + densityMatrix(ls + 1, cs + 1);
+
+        prewitt_grad[ls][cs].prewitt = abs(prewitt_grad[ls][cs].gx) + abs(prewitt_grad[ls][cs].gy);
+
         if (sobel_grad[ls][cs].sobel != 0)
           ROS_WARN("Gx=%f, Gy=%f, G=%f", sobel_grad[ls][cs].sobel_gx, sobel_grad[ls][cs].sobel_gy,
                    sobel_grad[ls][cs].sobel);
@@ -267,15 +256,16 @@ void NegObstc::spatial_segmentation()
         sobel_gx_points[s] = abs(sobel_grad[ls][cs].sobel_gx) / (2 * max) * 100;
         sobel_gy_points[s] = abs(sobel_grad[ls][cs].sobel_gy) / (2 * max) * 100;
         sobel_points[s] = sobel_grad[ls][cs].sobel / (4 * max) * 100;
+
+        prewitt_points[s] = prewitt_grad[ls][cs].prewitt / (3 * max) * 100;
+
         s++;
       }
 
-      grad_points[j] = Grad1D(grad[l][c].grad_tot, pace);
+      grad_points[j] = GradMag(grad[l][c].grad_tot, pace);
       grad_x_points[j] = Grad1D(grad[l][c].vertical, pace);
-      grad_y_points[j] = GradMag(grad[l][c].horizontal, pace);
+      grad_y_points[j] = Grad1D(grad[l][c].horizontal, pace);
       grad_dir_points[j] = GradDir(grad[l][c].direction, pace);
-      // ROS_WARN("Levels: Gx=%d, Gy=%d, G=%d, theta=%d", grad_x_points[j], grad_y_points[j], grad_points[j],
-      // grad_dir_points[j]);
 
       j++;
     }
@@ -289,6 +279,8 @@ void NegObstc::spatial_segmentation()
   sobelGrid.data = sobel_points;
   sobelGxGrid.data = sobel_gx_points;
   sobelGyGrid.data = sobel_gy_points;
+
+  prewittGrid.data = prewitt_points;
 }
 
 /**
