@@ -53,6 +53,13 @@ struct sobel_grad
   double sobel;
 };
 
+struct prewitt_grad
+{
+  double gx;
+  double gy;
+  double prewitt;
+};
+
 struct color
 {
   double r;

@@ -1,6 +1,7 @@
 #include <pcl/PCLPointCloud2.h>
 #include <pcl/common/common.h>
 #include <pcl/conversions.h>
+#include <pcl/filters/convolution.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl_conversions/pcl_conversions.h>
@@ -39,29 +40,33 @@ private:
   ros::NodeHandle nh_;
 
   /*pcl*/
-  pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Reconst;
-  pcl::PointCloud<pcl::PointXYZ>::Ptr Transformed_cloud;
-  pcl::PointCloud<pcl::PointXYZ> Cloud_check_size;
+  pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Reconst, Transformed_cloud;
+  // pcl::PointCloud<pcl::PointXYZ>::Ptr smooth_cloud;
+  // pcl::filters::Convolution<pcl::PointXYZ, pcl::PointXYZ> convolution;
+
   /*others*/
   double pace;
   float max;
   int N, j, s, writeCount, lin, col, nc, nl, ls, cs;
   Eigen::MatrixXd densityMatrix;
   Eigen::Index maxRow, maxCol;
+  // Eigen::ArrayXf gaussian_kernel;
   std::vector<signed char> density_points, grad_points, grad_x_points, grad_y_points, grad_dir_points, sobel_gx_points,
       sobel_gy_points, sobel_points;
 
   /*publishers and subscribers*/
   ros::Subscriber sub;
-  ros::Publisher marker_pub;
-  ros::Publisher density_pub, grad_pub, grad_x_pub, grad_y_pub, grad_dir_pub, sobel_gx_pub, sobel_gy_pub, sobel_pub;
+  ros::Publisher pub_cloud, density_pub, grad_pub, grad_x_pub, grad_y_pub, grad_dir_pub, sobel_gx_pub, sobel_gy_pub,
+      sobel_pub;
   tf::StampedTransform transform;
   tf::TransformListener listener;
   /*messages*/
+  // sensor_msgs::PointCloud2 CloudMsg_smooth;
   std_msgs::Header header;
   nav_msgs::MapMetaData info, info_grad, info_sobel;
   nav_msgs::OccupancyGrid densityGrid, gradGrid, gradXGrid, gradYGrid, gradDirGrid, sobelGxGrid, sobelGyGrid, sobelGrid;
 
+  // void GaussianFilter();
   void spatial_segmentation();
 
   void GetPointCloud(const sensor_msgs::PointCloud2ConstPtr &cloud_msg)
@@ -77,6 +82,8 @@ private:
 NegObstc::NegObstc()
 {
   /*publishers and subscribers*/
+  pub_cloud = nh_.advertise<sensor_msgs::PointCloud2>("Smooth_cloud", 100);
+
   density_pub = nh_.advertise<nav_msgs::OccupancyGrid>("density_pub", 1, true);
 
   grad_pub = nh_.advertise<nav_msgs::OccupancyGrid>("grad_pub", 1, true);
@@ -93,6 +100,7 @@ NegObstc::NegObstc()
   /*initialize pointers*/
   Cloud_Reconst.reset(new pcl::PointCloud<pcl::PointXYZ>);
   Transformed_cloud.reset(new pcl::PointCloud<pcl::PointXYZ>());
+  // smooth_cloud.reset(new pcl::PointCloud<pcl::PointXYZ>());
 }
 
 /**
@@ -101,9 +109,14 @@ NegObstc::NegObstc()
  */
 void NegObstc::loop_function()
 {
-  Cloud_check_size = (*Cloud_Reconst);
-  if (Cloud_check_size.points.size() != 0)
+  // Cloud_check_size = (*Cloud_Reconst);
+  if (Cloud_Reconst->points.size() != 0)
   {
+    // GaussianFilter();
+
+    // pcl::toROSMsg(*smooth_cloud, CloudMsg_smooth);
+    // pub_cloud.publish(CloudMsg_smooth);
+
     spatial_segmentation();
 
     density_pub.publish(densityGrid);
@@ -117,6 +130,21 @@ void NegObstc::loop_function()
     sobel_gy_pub.publish(sobelGrid);
   }
 }
+
+// void NegObstc::GaussianFilter()
+// {
+//   gaussian_kernel.resize(5);
+//   gaussian_kernel(0) = 1.f / 16;
+//   gaussian_kernel(1) = 1.f / 4;
+//   gaussian_kernel(2) = 3.f / 8;
+//   gaussian_kernel(3) = 1.f / 4;
+//   gaussian_kernel(4) = 1.f / 16;
+//   convolution.setBordersPolicy(pcl::filters::Convolution<pcl::PointXYZ, pcl::PointXYZ>::BORDERS_POLICY_IGNORE);
+//   convolution.setDistanceThreshold(0.1);
+//   convolution.setInputCloud(Transformed_cloud);
+//   convolution.setKernel(gaussian_kernel);
+//   convolution.convolve(*smooth_cloud);
+// }
 
 void NegObstc::spatial_segmentation()
 {
