@@ -13,6 +13,7 @@
 
 //-----------------
 #include <math.h>
+#include <stdlib.h>
 #include <algorithm>  // std::max
 #include <boost/foreach.hpp>
 #include <boost/thread/thread.hpp>
@@ -49,12 +50,12 @@ private:
   Eigen::MatrixXd densityMatrix;
   Eigen::Index maxRow, maxCol;
   std::vector<signed char> density_points, grad_points, grad_x_points, grad_y_points, grad_dir_points, sobel_gx_points,
-      sobel_gy_points, sobel_points, prewitt_points;
+      sobel_gy_points, sobel_points, prewitt_points, kirsh_points;
 
   /*publishers and subscribers*/
   ros::Subscriber sub;
   ros::Publisher pub_cloud, density_pub, grad_pub, grad_x_pub, grad_y_pub, grad_dir_pub, sobel_gx_pub, sobel_gy_pub,
-      sobel_pub, prewitt_pub;
+      sobel_pub, prewitt_pub, kirsh_pub;
   tf::StampedTransform transform;
   tf::TransformListener listener;
 
@@ -62,7 +63,7 @@ private:
   std_msgs::Header header;
   nav_msgs::MapMetaData info, info_grad, info_sobel;
   nav_msgs::OccupancyGrid densityGrid, gradGrid, gradXGrid, gradYGrid, gradDirGrid, sobelGxGrid, sobelGyGrid, sobelGrid,
-      prewittGrid;
+      prewittGrid, kirshGrid;
 
   void spatial_segmentation();
 
@@ -79,8 +80,6 @@ private:
 NegObstc::NegObstc()
 {
   /*publishers and subscribers*/
-  pub_cloud = nh_.advertise<sensor_msgs::PointCloud2>("Smooth_cloud", 100);
-
   density_pub = nh_.advertise<nav_msgs::OccupancyGrid>("density_pub", 1, true);
 
   grad_pub = nh_.advertise<nav_msgs::OccupancyGrid>("grad_pub", 1, true);
@@ -93,6 +92,8 @@ NegObstc::NegObstc()
   sobel_gy_pub = nh_.advertise<nav_msgs::OccupancyGrid>("sobel_gy_pub", 1, true);
 
   prewitt_pub = nh_.advertise<nav_msgs::OccupancyGrid>("prewitt_pub", 1, true);
+
+  kirsh_pub = nh_.advertise<nav_msgs::OccupancyGrid>("kirsh_pub", 1, true);
 
   sub = nh_.subscribe<sensor_msgs::PointCloud2>("/road_reconstruction", 1, &NegObstc::GetPointCloud, this);
 
@@ -123,6 +124,8 @@ void NegObstc::loop_function()
     sobel_gy_pub.publish(sobelGyGrid);
 
     prewitt_pub.publish(prewittGrid);
+
+    kirsh_pub.publish(kirshGrid);
   }
 }
 
@@ -157,6 +160,9 @@ void NegObstc::spatial_segmentation()
   prewitt_points.clear();
   prewitt_points.resize((nc - 2) * (nl - 2));
 
+  kirsh_points.clear();
+  kirsh_points.resize((nc - 2) * (nl - 2));
+
   /*initalizing messages for OccupancyGrid construction*/
   info.height = nc;
   info.width = nl;
@@ -176,10 +182,10 @@ void NegObstc::spatial_segmentation()
 
   /*initializing grids with constructed messages*/
   densityGrid.header = gradGrid.header = gradXGrid.header = gradYGrid.header = gradDirGrid.header = sobelGrid.header =
-      sobelGxGrid.header = sobelGyGrid.header = prewittGrid.header = header;
+      sobelGxGrid.header = sobelGyGrid.header = prewittGrid.header = kirshGrid.header = header;
   densityGrid.info = info;
   gradGrid.info = gradXGrid.info = gradYGrid.info = gradDirGrid.info = info_grad;
-  sobelGrid.info = sobelGxGrid.info = sobelGyGrid.info = prewittGrid.info = info_sobel;
+  sobelGrid.info = sobelGxGrid.info = sobelGyGrid.info = prewittGrid.info = kirshGrid.info = info_sobel;
 
   /*initialize matrix to save density*/
   densityMatrix.resize(nl, nc);
@@ -189,6 +195,7 @@ void NegObstc::spatial_segmentation()
   gradient_2d grad[nc - 1][nl - 1];
   sobel_grad sobel_grad[nc - 2][nl - 2];
   prewitt_grad prewitt_grad[nc - 2][nl - 2];
+  kirsh_grad kirsh_grad[nc - 2][nl - 2];
 
   pcl_ros::transformPointCloud("moving_axis", ros::Time(0), *Cloud_Reconst, "map", *Transformed_cloud,
                                NegObstc::listener);
@@ -245,9 +252,19 @@ void NegObstc::spatial_segmentation()
 
         prewitt_grad[ls][cs].prewitt = abs(prewitt_grad[ls][cs].gx) + abs(prewitt_grad[ls][cs].gy);
 
+        kirsh_grad[ls][cs].gx = 5 * densityMatrix(ls + 1, cs - 1) - 3 * densityMatrix(ls + 1, cs) -
+                                3 * densityMatrix(ls + 1, cs + 1) + 5 * densityMatrix(ls, cs - 1) -
+                                3 * densityMatrix(ls, cs + 1) + 5 * densityMatrix(ls - 1, cs - 1) -
+                                3 * densityMatrix(ls - 1, cs) - 3 * densityMatrix(ls - 1, cs + 1);
+        kirsh_grad[ls][cs].gy = (-3) * densityMatrix(ls + 1, cs - 1) - 3 * densityMatrix(ls + 1, cs) -
+                                3 * densityMatrix(ls + 1, cs + 1) - 3 * densityMatrix(ls, cs - 1) -
+                                3 * densityMatrix(ls, cs + 1) + 5 * densityMatrix(ls - 1, cs - 1) +
+                                5 * densityMatrix(ls - 1, cs) + 5 * densityMatrix(ls - 1, cs + 1);
+
+        kirsh_grad[ls][cs].kirsh = abs(kirsh_grad[ls][cs].gx)/5 + abs(kirsh_grad[ls][cs].gy)/5;
+
         if (sobel_grad[ls][cs].sobel != 0)
-          ROS_WARN("Gx=%f, Gy=%f, G=%f", sobel_grad[ls][cs].sobel_gx, sobel_grad[ls][cs].sobel_gy,
-                   sobel_grad[ls][cs].sobel);
+          ROS_WARN("Gx=%f, Gy=%f, G=%f", kirsh_grad[ls][cs].gx, kirsh_grad[ls][cs].gy, kirsh_grad[ls][cs].kirsh);
 
         // sobel_gx_points[s] = Sobel1D(sobel_grad[ls][cs].sobel_gx, pace);
         // sobel_gy_points[s] = Sobel1D(sobel_grad[ls][cs].sobel_gy, pace);
@@ -258,6 +275,7 @@ void NegObstc::spatial_segmentation()
         sobel_points[s] = sobel_grad[ls][cs].sobel / (4 * max) * 100;
 
         prewitt_points[s] = prewitt_grad[ls][cs].prewitt / (3 * max) * 100;
+        kirsh_points[s] = kirsh_grad[ls][cs].kirsh;
 
         s++;
       }
@@ -281,6 +299,7 @@ void NegObstc::spatial_segmentation()
   sobelGyGrid.data = sobel_gy_points;
 
   prewittGrid.data = prewitt_points;
+  kirshGrid.data = kirsh_points;
 }
 
 /**

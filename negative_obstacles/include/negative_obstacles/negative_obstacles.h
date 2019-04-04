@@ -60,6 +60,13 @@ struct prewitt_grad
   double prewitt;
 };
 
+struct kirsh_grad
+{
+  double gx;
+  double gy;
+  double kirsh;
+};
+
 struct color
 {
   double r;
