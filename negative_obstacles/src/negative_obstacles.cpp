@@ -199,28 +199,28 @@ void NegObstc::spatial_segmentation()
   j = s = lin = col = 0;
 
   /*clearing grid data*/
-  density_points.clear();
-  density_points.resize(N);
+  // density_points.clear();
+  density_points.setZero(N);
 
-  grad_points.clear();
-  grad_points.resize((nc - 1) * (nl - 1));
-  grad_x_points.clear();
-  grad_x_points.resize((nc - 1) * (nl - 1));
-  grad_y_points.clear();
-  grad_y_points.resize((nc - 1) * (nl - 1));
+  // grad_points.clear();
+  grad_points.setZero((nc - 1) * (nl - 1));
+  // grad_x_points.clear();
+  grad_x_points.setZero((nc - 1) * (nl - 1));
+  // grad_y_points.clear();
+  grad_y_points.setZero((nc - 1) * (nl - 1));
 
-  sobel_points.clear();
-  sobel_points.resize((nc - 2) * (nl - 2));
-  sobel_gx_points.clear();
-  sobel_gx_points.resize((nc - 2) * (nl - 2));
-  sobel_gy_points.clear();
-  sobel_gy_points.resize((nc - 2) * (nl - 2));
+  // sobel_points.clear();
+  sobel_points.setZero((nc - 2) * (nl - 2));
+  // sobel_gx_points.clear();
+  sobel_gx_points.setZero((nc - 2) * (nl - 2));
+  // sobel_gy_points.clear();
+  sobel_gy_points.setZero((nc - 2) * (nl - 2));
 
-  prewitt_points.clear();
-  prewitt_points.resize((nc - 2) * (nl - 2));
+  // prewitt_points.clear();
+  prewitt_points.setZero((nc - 2) * (nl - 2));
 
-  kirsh_points.clear();
-  kirsh_points.resize((nc - 2) * (nl - 2));
+  // kirsh_points.clear();
+  kirsh_points.setZero((nc - 2) * (nl - 2));
 
   /*initalizing messages for OccupancyGrid construction*/
   info.height = nc;
@@ -247,7 +247,7 @@ void NegObstc::spatial_segmentation()
   sobelGrid.info = sobelGxGrid.info = sobelGyGrid.info = prewittGrid.info = kirshGrid.info = info_sobel;
 
   /*initialize matrix to save density*/
-  densityMatrix.resize(nl, nc);
+  // densityMatrix.resize(nl, nc);
   densityMatrix.setZero(nl, nc);
 
   /*cubelist marker with gradient colorbar*/
