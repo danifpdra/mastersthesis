@@ -18,6 +18,7 @@ find_package(catkin REQUIRED COMPONENTS
   laser_geometry
   sensor_msgs
 pcl_ros
+OpenCV 
 )
 find_package(cmake_modules)
 find_package(Eigen REQUIRED)
@@ -152,7 +153,7 @@ add_executable(negative_obstacles src/negative_obstacles.cpp)
 # add_executable()
 #add_dependencies(negative_obstacles ${PROJECT_NAME}_gencfg)
 
-target_link_libraries(negative_obstacles ${catkin_LIBRARIES} ${PCL_LIBRARIES})
+target_link_libraries(negative_obstacles ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBS})
 #target_link_libraries(assem ${catkin_LIBRARIES} ${PCL_LIBRARIES})
 
 link_directories(${PCL_LIBRARY_DIRS})

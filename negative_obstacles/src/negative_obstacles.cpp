@@ -24,10 +24,14 @@
 #include <vector>
 //---------------------
 #include <visualization_msgs/Marker.h>
-
 #include "nav_msgs/MapMetaData.h"
 #include "nav_msgs/OccupancyGrid.h"
 #include "std_msgs/Header.h"
+
+// openCv
+#include <opencv2/core/core.hpp>
+#include <opencv2/highgui/highgui.hpp>
+#include "opencv2/imgproc/imgproc.hpp"
 
 #include "negative_obstacles/negative_obstacles.h"
 
@@ -47,10 +51,17 @@ private:
   double pace;
   float max;
   int N, j, s, writeCount, lin, col, nc, nl, ls, cs;
-  Eigen::MatrixXd densityMatrix;
+  int edgeThresh = 1;
+  int lowThreshold;
+  int const max_lowThreshold = 100;
+  int ratio = 3;
+  int kernel_size = 3;
+  Eigen::MatrixXd densityMatrix, densityMatrix_255;
   Eigen::Index maxRow, maxCol;
   std::vector<signed char> density_points, grad_points, grad_x_points, grad_y_points, grad_dir_points, sobel_gx_points,
       sobel_gy_points, sobel_points, prewitt_points, kirsh_points;
+  cv::Mat cv_img;
+  cv::Mat dst, detected_edges, canny;
 
   /*publishers and subscribers*/
   ros::Subscriber sub;
@@ -66,6 +77,7 @@ private:
       prewittGrid, kirshGrid;
 
   void spatial_segmentation();
+  cv::Mat CannyThreshold();
 
   void GetPointCloud(const sensor_msgs::PointCloud2ConstPtr &cloud_msg)
   {
@@ -126,7 +138,27 @@ void NegObstc::loop_function()
     prewitt_pub.publish(prewittGrid);
 
     kirsh_pub.publish(kirshGrid);
+
+    CannyThreshold();
   }
+}
+
+/**
+ * @function CannyThreshold
+ * @brief Trackbar callback - Canny thresholds input with a ratio 1:3
+ */
+void cv::Mat NegObstc::CannyThreshold()
+{
+  /// Create a matrix of the same type and size as src (for dst)
+  dst.create(cv_img.size(), cv_img.type());
+  /// Convert the image to grayscale
+  // cvtColor(img, src_gray, CV_BGR2GRAY);
+  /// Reduce noise with a kernel 3x3
+  cv::blur(cv_img, detected_edges, cv::Size(3, 3));
+  /// Canny detector
+  cv::Canny(cv_img, detected_edges, lowThreshold, lowThreshold * ratio, kernel_size);
+  /// Using Canny's output as a mask, we display our result
+  dst = cv::Scalar::all(0);
 }
 
 void NegObstc::spatial_segmentation()
@@ -191,6 +223,9 @@ void NegObstc::spatial_segmentation()
   densityMatrix.resize(nl, nc);
   densityMatrix.setZero(nl, nc);
 
+  densityMatrix_255.resize(nl, nc);
+  densityMatrix_255.setZero(nl, nc);
+
   /*cubelist marker with gradient colorbar*/
   gradient_2d grad[nc - 1][nl - 1];
   sobel_grad sobel_grad[nc - 2][nl - 2];
@@ -214,9 +249,13 @@ void NegObstc::spatial_segmentation()
         density_points[lin + col * nl] += 2;
     }
   }
-
-  densityGrid.data = density_points;
   max = densityMatrix.maxCoeff(&maxRow, &maxCol);
+  densityMatrix_255 = densityMatrix / max * 255;
+  densityGrid.data = density_points;
+
+  cv_img.create(nc, nl, CV_8U);
+  cv_img.data = density_points;
+  // img.data() = densityMatrix.data();
 
   // calculate gradient matrix
   for (int c = 0; c < nc - 1; c++)
@@ -261,10 +300,10 @@ void NegObstc::spatial_segmentation()
                                 3 * densityMatrix(ls, cs + 1) + 5 * densityMatrix(ls - 1, cs - 1) +
                                 5 * densityMatrix(ls - 1, cs) + 5 * densityMatrix(ls - 1, cs + 1);
 
-        kirsh_grad[ls][cs].kirsh = abs(kirsh_grad[ls][cs].gx)/5 + abs(kirsh_grad[ls][cs].gy)/5;
+        kirsh_grad[ls][cs].kirsh = abs(kirsh_grad[ls][cs].gx) / 5 + abs(kirsh_grad[ls][cs].gy) / 5;
 
-        if (sobel_grad[ls][cs].sobel != 0)
-          ROS_WARN("Gx=%f, Gy=%f, G=%f", kirsh_grad[ls][cs].gx, kirsh_grad[ls][cs].gy, kirsh_grad[ls][cs].kirsh);
+        // if (sobel_grad[ls][cs].sobel != 0)
+        //   ROS_WARN("Gx=%f, Gy=%f, G=%f", kirsh_grad[ls][cs].gx, kirsh_grad[ls][cs].gy, kirsh_grad[ls][cs].kirsh);
 
         // sobel_gx_points[s] = Sobel1D(sobel_grad[ls][cs].sobel_gx, pace);
         // sobel_gy_points[s] = Sobel1D(sobel_grad[ls][cs].sobel_gy, pace);
