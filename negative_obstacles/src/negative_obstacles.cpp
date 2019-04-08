@@ -36,6 +36,7 @@
 #include <opencv2/highgui/highgui.hpp>
 #include "opencv2/imgproc/imgproc.hpp"
 
+// grid maps
 #include <grid_map_core/grid_map_core.hpp>
 #include "grid_map_cv/GridMapCvConverter.hpp"
 #include "grid_map_ros/GridMapRosConverter.hpp"
@@ -59,20 +60,19 @@ private:
   float max;
   int N, j, s, writeCount, lin, col, nc, nl, ls, cs;
   Eigen::MatrixXd densityMatrix;
-  Eigen::Index maxRow, maxCol;
   std::vector<signed char> density_points, grad_points, grad_x_points, grad_y_points, sobel_gx_points, sobel_gy_points,
       sobel_points, prewitt_points, kirsh_points;
-  cv::Mat cv_img, dst, detected_edges;
+  cv::Mat canny_img, detected_edges, laplace_img, temporal_image, blur_img;
+  
 
   /*publishers and subscribers*/
   ros::Subscriber sub;
-  ros::Publisher pub_cloud, density_pub, grad_pub, grad_x_pub, grad_y_pub, sobel_gx_pub, sobel_gy_pub, sobel_pub,
-      prewitt_pub, kirsh_pub;
+  ros::Publisher density_pub, grad_pub, grad_x_pub, grad_y_pub, sobel_gx_pub, sobel_gy_pub, sobel_pub, prewitt_pub,
+      kirsh_pub;
   tf::StampedTransform transform;
   tf::TransformListener listener;
-  ros::Publisher img_pub;
+  ros::Publisher img_pub_canny, img_pub_laplace;
   image_transport::ImageTransport it;
-  cv::Mat temporal_image;
   grid_map::GridMap temporal_grid_map;
 
   /*messages*/
@@ -80,7 +80,8 @@ private:
   nav_msgs::MapMetaData info, info_grad, info_sobel;
   nav_msgs::OccupancyGrid densityGrid, gradGrid, gradXGrid, gradYGrid, sobelGxGrid, sobelGyGrid, sobelGrid, prewittGrid,
       kirshGrid;
-  sensor_msgs::ImagePtr msg_img;
+  sensor_msgs::ImagePtr msg_canny, msg_laplace;
+
   void spatial_segmentation();
   void CannyThreshold();
 
@@ -109,7 +110,8 @@ NegObstc::NegObstc() : it(nh_), temporal_grid_map({ "elevation" })
 
   prewitt_pub = nh_.advertise<nav_msgs::OccupancyGrid>("prewitt_pub", 1, true);
   kirsh_pub = nh_.advertise<nav_msgs::OccupancyGrid>("kirsh_pub", 1, true);
-  img_pub = nh_.advertise<sensor_msgs::Image>("density_img", 10);
+  img_pub_canny = nh_.advertise<sensor_msgs::Image>("canny_img", 10);
+  img_pub_laplace = nh_.advertise<sensor_msgs::Image>("laplace_img", 10);
 
   sub = nh_.subscribe<sensor_msgs::PointCloud2>("/road_reconstruction", 1, &NegObstc::GetPointCloud, this);
 
@@ -139,15 +141,14 @@ void NegObstc::loop_function()
     sobel_gy_pub.publish(sobelGyGrid);
 
     prewitt_pub.publish(prewittGrid);
-
     kirsh_pub.publish(kirshGrid);
 
     CannyThreshold();
-    // msg_img = cv_bridge::CvImage{ header, "mono8", temporal_image }.toImageMsg();
-    msg_img = cv_bridge::CvImage{ header, "mono8", dst }.toImageMsg();
-    img_pub.publish(msg_img);
+    msg_canny = cv_bridge::CvImage{ header, "mono8", canny_img }.toImageMsg();
+    img_pub_canny.publish(msg_canny);
 
-    CannyThreshold();
+    msg_laplace = cv_bridge::CvImage{ header, "mono8", laplace_img }.toImageMsg();
+    img_pub_laplace.publish(msg_laplace);
   }
 }
 
@@ -157,19 +158,22 @@ void NegObstc::loop_function()
  */
 void NegObstc::CannyThreshold()
 {
-  /// Create a matrix of the same type and size as src (for dst)
-  dst.create(temporal_image.size(), temporal_image.type());
-  /// Convert the image to grayscale
-  // cvtColor(img, src_gray, CV_BGR2GRAY);
-  detected_edges.create(temporal_image.size(), temporal_image.type());
+  int kerner_size = 3;
+  /// Create a matrix of the same type and size as src (for canny_img edge detection)
+  canny_img.create(temporal_image.size(), temporal_image.type());
+  // laplace_img.create(temporal_image.size(), temporal_image.type());
+  // detected_edges.create(temporal_image.size(), temporal_image.type());
   /// Reduce noise with a kernel 3x3
-  cv::blur(temporal_image, detected_edges, cv::Size(3, 3));
+  cv::blur(temporal_image, blur_img, cv::Size(3, 3));
   /// Canny detector
-  cv::Canny(detected_edges, detected_edges, 150, 255, 5);
-  /// Using Canny's output as a mask, we display our result
-  dst = cv::Scalar::all(0);
+  cv::Canny(blur_img, detected_edges, 125, 255, kerner_size);
+  // Laplacian detector
+  cv::Laplacian(blur_img, laplace_img, CV_16S, kerner_size, 1, 0, cv::BORDER_DEFAULT);
+  convertScaleAbs(laplace_img, laplace_img);
 
-  temporal_image.copyTo(dst, detected_edges);
+  /// Using Canny's output as a mask, we display our result
+  canny_img = cv::Scalar::all(0);
+  temporal_image.copyTo(canny_img, detected_edges);
 }
 
 void NegObstc::spatial_segmentation()
@@ -255,10 +259,9 @@ void NegObstc::spatial_segmentation()
         density_points[lin + col * nl] += 2;
     }
   }
-  max = densityMatrix.maxCoeff(&maxRow, &maxCol);
+  max = densityMatrix.maxCoeff();
   densityGrid.data = density_points;
   // std::cout << temporal_image << std::endl;
-  // std::cout << "size: " << cv_img.rows << std::endl;
 
   // calculate gradient matrix
   for (int c = 0; c < nc - 1; c++)
@@ -339,7 +342,7 @@ void NegObstc::spatial_segmentation()
   prewittGrid.data = prewitt_points;
   kirshGrid.data = kirsh_points;
 
-  grid_map::GridMapRosConverter::fromOccupancyGrid(gradGrid, "elevation", temporal_grid_map);
+  grid_map::GridMapRosConverter::fromOccupancyGrid(densityGrid, "elevation", temporal_grid_map);
   grid_map::GridMapCvConverter::toImage<unsigned char, 1>(temporal_grid_map, "elevation", CV_8UC1, temporal_image);
 }
 
