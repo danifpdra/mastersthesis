@@ -63,23 +63,22 @@ private:
   std::vector<signed char> density_points, grad_points, grad_x_points, grad_y_points, sobel_gx_points, sobel_gy_points,
       sobel_points, prewitt_points, kirsh_points;
   cv::Mat canny_img, detected_edges, laplace_img, temporal_image, blur_img;
-  
 
   /*publishers and subscribers*/
   ros::Subscriber sub;
   ros::Publisher density_pub, grad_pub, grad_x_pub, grad_y_pub, sobel_gx_pub, sobel_gy_pub, sobel_pub, prewitt_pub,
-      kirsh_pub;
+      kirsh_pub, canny_pub, laplacian_pub;
   tf::StampedTransform transform;
   tf::TransformListener listener;
   ros::Publisher img_pub_canny, img_pub_laplace;
   image_transport::ImageTransport it;
-  grid_map::GridMap temporal_grid_map;
+  grid_map::GridMap temporalGridMap, cannyGridMap, laplaceGridMap;
 
   /*messages*/
   std_msgs::Header header;
   nav_msgs::MapMetaData info, info_grad, info_sobel;
   nav_msgs::OccupancyGrid densityGrid, gradGrid, gradXGrid, gradYGrid, sobelGxGrid, sobelGyGrid, sobelGrid, prewittGrid,
-      kirshGrid;
+      kirshGrid, cannyGrid, laplaceGrid;
   sensor_msgs::ImagePtr msg_canny, msg_laplace;
 
   void spatial_segmentation();
@@ -95,7 +94,8 @@ private:
  * @brief Construct a new Neg Obstc:: Neg Obstc object
  *
  */
-NegObstc::NegObstc() : it(nh_), temporal_grid_map({ "elevation" })
+NegObstc::NegObstc()
+  : it(nh_), temporalGridMap({ "elevation" }), cannyGridMap({ "canny" }), laplaceGridMap({ "laplacian" })
 {
   /*publishers and subscribers*/
   density_pub = nh_.advertise<nav_msgs::OccupancyGrid>("density_pub", 1, true);
@@ -110,8 +110,11 @@ NegObstc::NegObstc() : it(nh_), temporal_grid_map({ "elevation" })
 
   prewitt_pub = nh_.advertise<nav_msgs::OccupancyGrid>("prewitt_pub", 1, true);
   kirsh_pub = nh_.advertise<nav_msgs::OccupancyGrid>("kirsh_pub", 1, true);
+
   img_pub_canny = nh_.advertise<sensor_msgs::Image>("canny_img", 10);
   img_pub_laplace = nh_.advertise<sensor_msgs::Image>("laplace_img", 10);
+  canny_pub = nh_.advertise<nav_msgs::OccupancyGrid>("canny_pub", 1, true);
+  laplacian_pub = nh_.advertise<nav_msgs::OccupancyGrid>("laplacian_pub", 1, true);
 
   sub = nh_.subscribe<sensor_msgs::PointCloud2>("/road_reconstruction", 1, &NegObstc::GetPointCloud, this);
 
@@ -149,6 +152,19 @@ void NegObstc::loop_function()
 
     msg_laplace = cv_bridge::CvImage{ header, "mono8", laplace_img }.toImageMsg();
     img_pub_laplace.publish(msg_laplace);
+
+    grid_map::GridMapRosConverter::initializeFromImage(*msg_canny, pace, cannyGridMap);
+    grid_map::GridMapRosConverter::addLayerFromImage(*msg_canny, "canny", cannyGridMap, 0, 255, 255);
+    grid_map::GridMapRosConverter::toOccupancyGrid(cannyGridMap, "canny", 0, 255, cannyGrid);
+    cannyGrid.info = info;
+
+    grid_map::GridMapRosConverter::initializeFromImage(*msg_laplace, pace, laplaceGridMap);
+    grid_map::GridMapRosConverter::addLayerFromImage(*msg_laplace, "laplacian", laplaceGridMap, 0, 255, 255);
+    grid_map::GridMapRosConverter::toOccupancyGrid(laplaceGridMap, "laplacian", 0, 255, laplaceGrid);
+    laplaceGrid.info = info;
+
+    canny_pub.publish(cannyGrid);
+    laplacian_pub.publish(laplaceGrid);
   }
 }
 
@@ -161,8 +177,6 @@ void NegObstc::CannyThreshold()
   int kerner_size = 3;
   /// Create a matrix of the same type and size as src (for canny_img edge detection)
   canny_img.create(temporal_image.size(), temporal_image.type());
-  // laplace_img.create(temporal_image.size(), temporal_image.type());
-  // detected_edges.create(temporal_image.size(), temporal_image.type());
   /// Reduce noise with a kernel 3x3
   cv::blur(temporal_image, blur_img, cv::Size(3, 3));
   /// Canny detector
@@ -342,8 +356,8 @@ void NegObstc::spatial_segmentation()
   prewittGrid.data = prewitt_points;
   kirshGrid.data = kirsh_points;
 
-  grid_map::GridMapRosConverter::fromOccupancyGrid(densityGrid, "elevation", temporal_grid_map);
-  grid_map::GridMapCvConverter::toImage<unsigned char, 1>(temporal_grid_map, "elevation", CV_8UC1, temporal_image);
+  grid_map::GridMapRosConverter::fromOccupancyGrid(densityGrid, "elevation", temporalGridMap);
+  grid_map::GridMapCvConverter::toImage<unsigned char, 1>(temporalGridMap, "elevation", CV_8UC1, temporal_image);
 }
 
 /**
