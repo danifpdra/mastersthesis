@@ -43,7 +43,6 @@ struct gradient_2d
   int vertical;
   int horizontal;
   double grad_tot;
-  double direction;
 };
 
 struct sobel_grad

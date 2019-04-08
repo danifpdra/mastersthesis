@@ -36,10 +36,9 @@
 #include <opencv2/highgui/highgui.hpp>
 #include "opencv2/imgproc/imgproc.hpp"
 
+#include <grid_map_core/grid_map_core.hpp>
 #include "grid_map_cv/GridMapCvConverter.hpp"
 #include "grid_map_ros/GridMapRosConverter.hpp"
-// #include "grid_map_ros/GridMap.hpp"
-#include <grid_map_core/grid_map_core.hpp>
 
 #include "negative_obstacles/negative_obstacles.h"
 
@@ -58,21 +57,17 @@ private:
   /*others*/
   double pace;
   float max;
-  int N, j, s, writeCount, lin, col, nc, nl, ls, cs, lowThreshold;
-  int edgeThresh = 1;
-  int const max_lowThreshold = 100;
-  int ratio = 3;
-  int kernel_size = 3;
-  Eigen::MatrixXd densityMatrix, densityMatrix_255;
+  int N, j, s, writeCount, lin, col, nc, nl, ls, cs;
+  Eigen::MatrixXd densityMatrix;
   Eigen::Index maxRow, maxCol;
-  std::vector<signed char> density_points, grad_points, grad_x_points, grad_y_points, grad_dir_points, sobel_gx_points,
-      sobel_gy_points, sobel_points, prewitt_points, kirsh_points;
+  std::vector<signed char> density_points, grad_points, grad_x_points, grad_y_points, sobel_gx_points, sobel_gy_points,
+      sobel_points, prewitt_points, kirsh_points;
   cv::Mat cv_img, dst, detected_edges;
 
   /*publishers and subscribers*/
   ros::Subscriber sub;
-  ros::Publisher pub_cloud, density_pub, grad_pub, grad_x_pub, grad_y_pub, grad_dir_pub, sobel_gx_pub, sobel_gy_pub,
-      sobel_pub, prewitt_pub, kirsh_pub;
+  ros::Publisher pub_cloud, density_pub, grad_pub, grad_x_pub, grad_y_pub, sobel_gx_pub, sobel_gy_pub, sobel_pub,
+      prewitt_pub, kirsh_pub;
   tf::StampedTransform transform;
   tf::TransformListener listener;
   ros::Publisher img_pub;
@@ -83,8 +78,8 @@ private:
   /*messages*/
   std_msgs::Header header;
   nav_msgs::MapMetaData info, info_grad, info_sobel;
-  nav_msgs::OccupancyGrid densityGrid, gradGrid, gradXGrid, gradYGrid, gradDirGrid, sobelGxGrid, sobelGyGrid, sobelGrid,
-      prewittGrid, kirshGrid;
+  nav_msgs::OccupancyGrid densityGrid, gradGrid, gradXGrid, gradYGrid, sobelGxGrid, sobelGyGrid, sobelGrid, prewittGrid,
+      kirshGrid;
   sensor_msgs::ImagePtr msg_img;
   void spatial_segmentation();
   void CannyThreshold();
@@ -107,16 +102,13 @@ NegObstc::NegObstc() : it(nh_), temporal_grid_map({ "elevation" })
   grad_pub = nh_.advertise<nav_msgs::OccupancyGrid>("grad_pub", 1, true);
   grad_x_pub = nh_.advertise<nav_msgs::OccupancyGrid>("grad_x_pub", 1, true);
   grad_y_pub = nh_.advertise<nav_msgs::OccupancyGrid>("grad_y_pub", 1, true);
-  grad_dir_pub = nh_.advertise<nav_msgs::OccupancyGrid>("grad_dir_pub", 1, true);
 
   sobel_pub = nh_.advertise<nav_msgs::OccupancyGrid>("sobel_pub", 1, true);
   sobel_gx_pub = nh_.advertise<nav_msgs::OccupancyGrid>("sobel_gx_pub", 1, true);
   sobel_gy_pub = nh_.advertise<nav_msgs::OccupancyGrid>("sobel_gy_pub", 1, true);
 
   prewitt_pub = nh_.advertise<nav_msgs::OccupancyGrid>("prewitt_pub", 1, true);
-
   kirsh_pub = nh_.advertise<nav_msgs::OccupancyGrid>("kirsh_pub", 1, true);
-
   img_pub = nh_.advertise<sensor_msgs::Image>("density_img", 10);
 
   sub = nh_.subscribe<sensor_msgs::PointCloud2>("/road_reconstruction", 1, &NegObstc::GetPointCloud, this);
@@ -141,7 +133,6 @@ void NegObstc::loop_function()
     grad_pub.publish(gradGrid);
     grad_x_pub.publish(gradXGrid);
     grad_y_pub.publish(gradYGrid);
-    grad_dir_pub.publish(gradDirGrid);
 
     sobel_pub.publish(sobelGrid);
     sobel_gx_pub.publish(sobelGxGrid);
@@ -151,10 +142,12 @@ void NegObstc::loop_function()
 
     kirsh_pub.publish(kirshGrid);
 
-    msg_img = cv_bridge::CvImage{ header, "mono8", temporal_image }.toImageMsg();
+    CannyThreshold();
+    // msg_img = cv_bridge::CvImage{ header, "mono8", temporal_image }.toImageMsg();
+    msg_img = cv_bridge::CvImage{ header, "mono8", dst }.toImageMsg();
     img_pub.publish(msg_img);
 
-    // CannyThreshold();
+    CannyThreshold();
   }
 }
 
@@ -164,17 +157,19 @@ void NegObstc::loop_function()
  */
 void NegObstc::CannyThreshold()
 {
-  // /// Create a matrix of the same type and size as src (for dst)
-  // dst.create(cv_img.size(), cv_img.type());
-  // /// Convert the image to grayscale
-  // // cvtColor(img, src_gray, CV_BGR2GRAY);
-  // detected_edges.create(cv_img.size(), cv_img.type());
-  // /// Reduce noise with a kernel 3x3
-  // cv::blur(cv_img, detected_edges, cv::Size(3, 3));
-  // /// Canny detector
-  // cv::Canny(cv_img, detected_edges, lowThreshold, lowThreshold * ratio, kernel_size);
-  // /// Using Canny's output as a mask, we display our result
-  // dst = cv::Scalar::all(0);
+  /// Create a matrix of the same type and size as src (for dst)
+  dst.create(temporal_image.size(), temporal_image.type());
+  /// Convert the image to grayscale
+  // cvtColor(img, src_gray, CV_BGR2GRAY);
+  detected_edges.create(temporal_image.size(), temporal_image.type());
+  /// Reduce noise with a kernel 3x3
+  cv::blur(temporal_image, detected_edges, cv::Size(3, 3));
+  /// Canny detector
+  cv::Canny(detected_edges, detected_edges, 150, 255, 5);
+  /// Using Canny's output as a mask, we display our result
+  dst = cv::Scalar::all(0);
+
+  temporal_image.copyTo(dst, detected_edges);
 }
 
 void NegObstc::spatial_segmentation()
@@ -195,8 +190,6 @@ void NegObstc::spatial_segmentation()
   grad_x_points.resize((nc - 1) * (nl - 1));
   grad_y_points.clear();
   grad_y_points.resize((nc - 1) * (nl - 1));
-  grad_dir_points.clear();
-  grad_dir_points.resize((nc - 1) * (nl - 1));
 
   sobel_points.clear();
   sobel_points.resize((nc - 2) * (nl - 2));
@@ -229,18 +222,15 @@ void NegObstc::spatial_segmentation()
   info.origin.orientation.z = info_grad.origin.orientation.z = info_sobel.origin.orientation.z = 0;
 
   /*initializing grids with constructed messages*/
-  densityGrid.header = gradGrid.header = gradXGrid.header = gradYGrid.header = gradDirGrid.header = sobelGrid.header =
-      sobelGxGrid.header = sobelGyGrid.header = prewittGrid.header = kirshGrid.header = header;
+  densityGrid.header = gradGrid.header = gradXGrid.header = gradYGrid.header = sobelGrid.header = sobelGxGrid.header =
+      sobelGyGrid.header = prewittGrid.header = kirshGrid.header = header;
   densityGrid.info = info;
-  gradGrid.info = gradXGrid.info = gradYGrid.info = gradDirGrid.info = info_grad;
+  gradGrid.info = gradXGrid.info = gradYGrid.info = info_grad;
   sobelGrid.info = sobelGxGrid.info = sobelGyGrid.info = prewittGrid.info = kirshGrid.info = info_sobel;
 
   /*initialize matrix to save density*/
   densityMatrix.resize(nl, nc);
   densityMatrix.setZero(nl, nc);
-
-  densityMatrix_255.resize(nl, nc);
-  densityMatrix_255.setZero(nl, nc);
 
   /*cubelist marker with gradient colorbar*/
   gradient_2d grad[nc - 1][nl - 1];
@@ -266,15 +256,8 @@ void NegObstc::spatial_segmentation()
     }
   }
   max = densityMatrix.maxCoeff(&maxRow, &maxCol);
-  densityMatrix_255 = densityMatrix / max * 255;
   densityGrid.data = density_points;
-  cv_img.create(nc, nl, CV_8UC1);
-  cv::eigen2cv(densityMatrix_255, cv_img);
-
-  grid_map::GridMapRosConverter::fromOccupancyGrid(densityGrid, "elevation", temporal_grid_map);
-  grid_map::GridMapCvConverter::toImage<unsigned char, 1>(temporal_grid_map, "elevation", CV_8UC1,
-                                                          temporal_image);
-  // std::cout << cv_img << std::endl;
+  // std::cout << temporal_image << std::endl;
   // std::cout << "size: " << cv_img.rows << std::endl;
 
   // calculate gradient matrix
@@ -286,8 +269,6 @@ void NegObstc::spatial_segmentation()
       grad[l][c].horizontal = densityMatrix(l, c + 1) - densityMatrix(l, c);
       grad[l][c].grad_tot =
           abs(static_cast<double>(grad[l][c].vertical)) + abs(static_cast<double>(grad[l][c].horizontal));
-      grad[l][c].direction =
-          atan2(static_cast<double>(grad[l][c].horizontal), static_cast<double>(grad[l][c].vertical));
 
       if (c < nc - 2 && l < nl - 2)
       {
@@ -342,7 +323,6 @@ void NegObstc::spatial_segmentation()
       grad_points[j] = GradMag(grad[l][c].grad_tot, pace);
       grad_x_points[j] = Grad1D(grad[l][c].vertical, pace);
       grad_y_points[j] = Grad1D(grad[l][c].horizontal, pace);
-      grad_dir_points[j] = GradDir(grad[l][c].direction, pace);
 
       j++;
     }
@@ -351,7 +331,6 @@ void NegObstc::spatial_segmentation()
   gradGrid.data = grad_points;
   gradXGrid.data = grad_x_points;
   gradYGrid.data = grad_y_points;
-  gradDirGrid.data = grad_dir_points;
 
   sobelGrid.data = sobel_points;
   sobelGxGrid.data = sobel_gx_points;
@@ -359,6 +338,9 @@ void NegObstc::spatial_segmentation()
 
   prewittGrid.data = prewitt_points;
   kirshGrid.data = kirsh_points;
+
+  grid_map::GridMapRosConverter::fromOccupancyGrid(gradGrid, "elevation", temporal_grid_map);
+  grid_map::GridMapCvConverter::toImage<unsigned char, 1>(temporal_grid_map, "elevation", CV_8UC1, temporal_image);
 }
 
 /**
