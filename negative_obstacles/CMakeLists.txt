@@ -153,15 +153,6 @@ include_directories(
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 add_executable(negative_obstacles src/negative_obstacles.cpp)
-#add_executable(assem src/assemble.cpp)
-# add_executable()
-#add_dependencies(negative_obstacles ${PROJECT_NAME}_gencfg)
-
-target_link_libraries(negative_obstacles ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBS})
-#target_link_libraries(assem ${catkin_LIBRARIES} ${PCL_LIBRARIES})
-
-link_directories(${PCL_LIBRARY_DIRS})
-# include_directories(${PCL_INCLUDE_DIRS})
 link_directories(${PCL_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS})
 
@@ -184,6 +175,7 @@ add_definitions(${PCL_DEFINITIONS})
    ${PCL_LIBRARIES}
    ${PCL_COMMON_LIBRARIES}
    ${PCL_IO_LIBRARIES}
+   ${OpenCV_LIBS}
 )
 
 #############
