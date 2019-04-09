@@ -175,12 +175,32 @@ Visualization Manager:
       Class: rviz/Map
       Color Scheme: map
       Draw Behind: true
-      Enabled: false
-      Name: DensityMap
+      Enabled: true
+      Name: DensityMap.0.2
       Topic: /density_pub
       Unreliable: false
       Use Timestamp: false
-      Value: false
+      Value: true
+    - Alpha: 1
+      Class: rviz/Map
+      Color Scheme: map
+      Draw Behind: true
+      Enabled: true
+      Name: DensityMap0.5
+      Topic: /density_pub_down
+      Unreliable: false
+      Use Timestamp: false
+      Value: true
+    - Alpha: 1
+      Class: rviz/Map
+      Color Scheme: map
+      Draw Behind: true
+      Enabled: true
+      Name: DensityMap.1
+      Topic: /density_pub_up
+      Unreliable: false
+      Use Timestamp: false
+      Value: true
     - Alpha: 0.699999988079071
       Class: rviz/Map
       Color Scheme: map
@@ -311,12 +331,12 @@ Visualization Manager:
       Class: rviz/Map
       Color Scheme: map
       Draw Behind: false
-      Enabled: true
+      Enabled: false
       Name: canny_grid
       Topic: /canny_pub
       Unreliable: false
       Use Timestamp: false
-      Value: true
+      Value: false
     - Alpha: 0.699999988079071
       Class: rviz/Map
       Color Scheme: map
@@ -355,7 +375,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/ThirdPersonFollower
-      Distance: 52.690277099609375
+      Distance: 90.20320129394531
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -370,10 +390,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.8397968411445618
+      Pitch: 0.4147968888282776
       Target Frame: base_link_imu
       Value: ThirdPersonFollower (rviz)
-      Yaw: 3.15997052192688
+      Yaw: 2.6049656867980957
     Saved:
       - Angle: 0
         Class: rviz/TopDownOrtho

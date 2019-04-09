@@ -17,12 +17,12 @@ find_package(catkin REQUIRED COMPONENTS
   tf
   laser_geometry
   sensor_msgs
-pcl_ros
-OpenCV 
-cv_bridge
-image_transport
-grid_map_ros
-grid_map_cv
+  pcl_ros
+  OpenCV 
+  cv_bridge
+  image_transport
+  grid_map_ros
+  grid_map_cv
 )
 find_package(cmake_modules)
 find_package(Eigen REQUIRED)
