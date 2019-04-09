@@ -1,7 +1,7 @@
+/*Point cloud*/
 #include <pcl/PCLPointCloud2.h>
 #include <pcl/common/common.h>
 #include <pcl/conversions.h>
-#include <pcl/filters/convolution.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl_conversions/pcl_conversions.h>
@@ -10,33 +10,26 @@
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <tf/transform_listener.h>
-
-//-----------------
+/*math*/
 #include <math.h>
 #include <stdlib.h>
-#include <algorithm> // std::max
-#include <boost/foreach.hpp>
-#include <boost/thread/thread.hpp>
+#include <algorithm>
 #include <cmath>
-#include <ctime>
 #include <fstream>
 #include <iostream>
 #include <vector>
-//---------------------
-#include <visualization_msgs/Marker.h>
+/*msgs*/
 #include "nav_msgs/MapMetaData.h"
 #include "nav_msgs/OccupancyGrid.h"
 #include "std_msgs/Header.h"
-
-// openCv
+/* openCv*/
 #include <cv_bridge/cv_bridge.h>
 #include <image_transport/image_transport.h>
 #include <opencv2/core/core.hpp>
 #include <opencv2/core/eigen.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include "opencv2/imgproc/imgproc.hpp"
-
-// grid maps
+/*Grid maps*/
 #include <grid_map_core/grid_map_core.hpp>
 #include "grid_map_cv/GridMapCvConverter.hpp"
 #include "grid_map_ros/GridMapRosConverter.hpp"
@@ -50,8 +43,7 @@ public:
   void LoopFunction();
 
 private:
-  ros::NodeHandle nh_;
-
+  ros::NodeHandle nh;
   /*pcl*/
   pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Reconst, Transformed_cloud;
 
@@ -68,6 +60,8 @@ private:
   ros::Subscriber sub;
   ros::Publisher density_pub, density_pub_up, density_pub_down, grad_pub, grad_x_pub, grad_y_pub, sobel_gx_pub,
       sobel_gy_pub, sobel_pub, prewitt_pub, kirsh_pub, canny_pub, laplacian_pub;
+
+  /*ROS*/
   tf::StampedTransform transform;
   tf::TransformListener listener;
   ros::Publisher img_pub_canny, img_pub_laplace;
@@ -98,30 +92,36 @@ private:
  *
  */
 NegObstc::NegObstc()
-    : it(nh_), temporalGridMap({"elevation"}), cannyGridMap({"canny"}), laplaceGridMap({"laplacian"}), sobelGridMap({"sobel"}), sobelGxGridMap({"sobelX"}), sobelGyGridMap({"sobelY"})
+  : it(nh)
+  , temporalGridMap({ "elevation" })
+  , cannyGridMap({ "canny" })
+  , laplaceGridMap({ "laplacian" })
+  , sobelGridMap({ "sobel" })
+  , sobelGxGridMap({ "sobelX" })
+  , sobelGyGridMap({ "sobelY" })
 {
   /*publishers and subscribers*/
-  density_pub = nh_.advertise<nav_msgs::OccupancyGrid>("density_pub", 1, true);
-  density_pub_up = nh_.advertise<nav_msgs::OccupancyGrid>("density_pub_up", 1, true);
-  density_pub_down = nh_.advertise<nav_msgs::OccupancyGrid>("density_pub_down", 1, true);
+  density_pub = nh.advertise<nav_msgs::OccupancyGrid>("density_pub", 1, true);
+  density_pub_up = nh.advertise<nav_msgs::OccupancyGrid>("density_pub_up", 1, true);
+  density_pub_down = nh.advertise<nav_msgs::OccupancyGrid>("density_pub_down", 1, true);
 
-  grad_pub = nh_.advertise<nav_msgs::OccupancyGrid>("grad_pub", 1, true);
-  grad_x_pub = nh_.advertise<nav_msgs::OccupancyGrid>("grad_x_pub", 1, true);
-  grad_y_pub = nh_.advertise<nav_msgs::OccupancyGrid>("grad_y_pub", 1, true);
+  grad_pub = nh.advertise<nav_msgs::OccupancyGrid>("grad_pub", 1, true);
+  grad_x_pub = nh.advertise<nav_msgs::OccupancyGrid>("grad_x_pub", 1, true);
+  grad_y_pub = nh.advertise<nav_msgs::OccupancyGrid>("grad_y_pub", 1, true);
 
-  sobel_pub = nh_.advertise<nav_msgs::OccupancyGrid>("sobel_pub", 1, true);
-  sobel_gx_pub = nh_.advertise<nav_msgs::OccupancyGrid>("sobel_gx_pub", 1, true);
-  sobel_gy_pub = nh_.advertise<nav_msgs::OccupancyGrid>("sobel_gy_pub", 1, true);
+  sobel_pub = nh.advertise<nav_msgs::OccupancyGrid>("sobel_pub", 1, true);
+  sobel_gx_pub = nh.advertise<nav_msgs::OccupancyGrid>("sobel_gx_pub", 1, true);
+  sobel_gy_pub = nh.advertise<nav_msgs::OccupancyGrid>("sobel_gy_pub", 1, true);
 
-  prewitt_pub = nh_.advertise<nav_msgs::OccupancyGrid>("prewitt_pub", 1, true);
-  kirsh_pub = nh_.advertise<nav_msgs::OccupancyGrid>("kirsh_pub", 1, true);
+  prewitt_pub = nh.advertise<nav_msgs::OccupancyGrid>("prewitt_pub", 1, true);
+  kirsh_pub = nh.advertise<nav_msgs::OccupancyGrid>("kirsh_pub", 1, true);
 
-  img_pub_canny = nh_.advertise<sensor_msgs::Image>("canny_img", 10);
-  img_pub_laplace = nh_.advertise<sensor_msgs::Image>("laplace_img", 10);
-  canny_pub = nh_.advertise<nav_msgs::OccupancyGrid>("canny_pub", 1, true);
-  laplacian_pub = nh_.advertise<nav_msgs::OccupancyGrid>("laplacian_pub", 1, true);
+  img_pub_canny = nh.advertise<sensor_msgs::Image>("canny_img", 10);
+  img_pub_laplace = nh.advertise<sensor_msgs::Image>("laplace_img", 10);
+  canny_pub = nh.advertise<nav_msgs::OccupancyGrid>("canny_pub", 1, true);
+  laplacian_pub = nh.advertise<nav_msgs::OccupancyGrid>("laplacian_pub", 1, true);
 
-  sub = nh_.subscribe<sensor_msgs::PointCloud2>("/road_reconstruction", 1, &NegObstc::GetPointCloud, this);
+  sub = nh.subscribe<sensor_msgs::PointCloud2>("/road_reconstruction", 1, &NegObstc::GetPointCloud, this);
 
   /*initialize pointers*/
   Cloud_Reconst.reset(new pcl::PointCloud<pcl::PointXYZ>);
@@ -134,7 +134,6 @@ NegObstc::NegObstc()
  */
 void NegObstc::LoopFunction()
 {
-  // Cloud_check_size = (*Cloud_Reconst);
   if (Cloud_Reconst->points.size() != 0)
   {
     DensityCalculation();
@@ -172,29 +171,29 @@ void NegObstc::Publishers()
 
 void NegObstc::ImageConversion()
 {
-  msg_canny = cv_bridge::CvImage{header, "mono8", canny_img}.toImageMsg();
+  msg_canny = cv_bridge::CvImage{ header, "mono8", canny_img }.toImageMsg();
   grid_map::GridMapRosConverter::initializeFromImage(*msg_canny, pace, cannyGridMap);
   grid_map::GridMapRosConverter::addLayerFromImage(*msg_canny, "canny", cannyGridMap, 0, 255, 255);
   grid_map::GridMapRosConverter::toOccupancyGrid(cannyGridMap, "canny", 0, 255, cannyGrid);
   cannyGrid.info = info;
 
-  msg_laplace = cv_bridge::CvImage{header, "mono8", laplace_img}.toImageMsg();
+  msg_laplace = cv_bridge::CvImage{ header, "mono8", laplace_img }.toImageMsg();
   grid_map::GridMapRosConverter::initializeFromImage(*msg_laplace, pace, laplaceGridMap);
   grid_map::GridMapRosConverter::addLayerFromImage(*msg_laplace, "laplacian", laplaceGridMap, 0, 255, 255);
   grid_map::GridMapRosConverter::toOccupancyGrid(laplaceGridMap, "laplacian", 0, 255, laplaceGrid);
   laplaceGrid.info = info;
 
-  msg_sobel = cv_bridge::CvImage{header, "mono8", sobel_img}.toImageMsg();
+  msg_sobel = cv_bridge::CvImage{ header, "mono8", sobel_img }.toImageMsg();
   grid_map::GridMapRosConverter::initializeFromImage(*msg_sobel, pace, sobelGridMap);
   grid_map::GridMapRosConverter::addLayerFromImage(*msg_sobel, "sobel", sobelGridMap, 0, 255, 125);
   grid_map::GridMapRosConverter::toOccupancyGrid(sobelGridMap, "sobel", 0, 255, sobelGrid);
 
-  msg_sobelX = cv_bridge::CvImage{header, "mono8", sobel_grad_x}.toImageMsg();
+  msg_sobelX = cv_bridge::CvImage{ header, "mono8", sobel_grad_x }.toImageMsg();
   grid_map::GridMapRosConverter::initializeFromImage(*msg_sobelX, pace, sobelGxGridMap);
   grid_map::GridMapRosConverter::addLayerFromImage(*msg_sobelX, "sobelX", sobelGxGridMap, 0, 255, 125);
   grid_map::GridMapRosConverter::toOccupancyGrid(sobelGxGridMap, "sobelX", 0, 255, sobelGxGrid);
 
-  msg_sobelY = cv_bridge::CvImage{header, "mono8", sobel_grad_y}.toImageMsg();
+  msg_sobelY = cv_bridge::CvImage{ header, "mono8", sobel_grad_y }.toImageMsg();
   grid_map::GridMapRosConverter::initializeFromImage(*msg_sobelY, pace, sobelGyGridMap);
   grid_map::GridMapRosConverter::addLayerFromImage(*msg_sobelY, "sobelY", sobelGyGridMap, 0, 255, 125);
   grid_map::GridMapRosConverter::toOccupancyGrid(sobelGyGridMap, "sobelY", 0, 255, sobelGyGrid);

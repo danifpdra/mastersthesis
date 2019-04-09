@@ -5,7 +5,7 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /TF1/Frames1
-      Splitter Ratio: 0.6132596731185913
+      Splitter Ratio: 0.49140048027038574
     Tree Height: 562
   - Class: rviz/Selection
     Name: Selection
@@ -375,7 +375,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/ThirdPersonFollower
-      Distance: 90.20320129394531
+      Distance: 103.1595230102539
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -390,10 +390,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.4147968888282776
+      Pitch: 0.6097967624664307
       Target Frame: base_link_imu
       Value: ThirdPersonFollower (rviz)
-      Yaw: 2.6049656867980957
+      Yaw: 3.0049679279327393
     Saved:
       - Angle: 0
         Class: rviz/TopDownOrtho
