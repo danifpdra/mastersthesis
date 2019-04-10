@@ -161,7 +161,7 @@ int Sobel1D(int G, double pace)
     level = 30;
   else if (G >= 100 * pace && G < 200 * pace)
     level = 15;
-  else if (G >= 0  && G < 100 * pace)
+  else if (G >= 0 && G < 100 * pace)
     level = 0;
   else if (G >= -100 * pace && G < 0)
     level = 0;
@@ -307,6 +307,17 @@ int GradDir(int G, double pace)
     level = 50;
   else if (G < -M_PI)
     level = 100;
+  else
+    level = 0;
+
+  return level;
+}
+
+int Threshold(double G, double lim)
+{
+  int level;
+  if (G > lim)
+    level = G;
   else
     level = 0;
 
