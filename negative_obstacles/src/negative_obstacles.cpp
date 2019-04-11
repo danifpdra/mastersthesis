@@ -29,7 +29,9 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/core/eigen.hpp>
 #include <opencv2/highgui/highgui.hpp>
+#include <opencv2/opencv.hpp>
 #include "opencv2/imgproc/imgproc.hpp"
+
 /*Grid maps*/
 #include <grid_map_core/grid_map_core.hpp>
 #include "grid_map_cv/GridMapCvConverter.hpp"
@@ -53,8 +55,8 @@ private:
   float max, carVelocity, norm;
   int N, j, s, writeCount, lin, col, nc, nl, ls, cs, lin_up, col_up, lin_down, col_down;
   Eigen::MatrixXd densityMatrix;
-  std::vector<int8_t> density_points, density_points_up, density_points_down, grad_points, grad_x_points,
-      grad_y_points, prewitt_points, kirsh_points;
+  std::vector<int8_t> density_points, density_points_up, density_points_down, grad_points, grad_x_points, grad_y_points,
+      prewitt_points, kirsh_points;
   cv::Mat canny_img, detected_edges, laplace_img, temporal_image, blur_img, sobel_img, sobel_grad_x, sobel_grad_y;
 
   /*publishers and subscribers*/
@@ -91,13 +93,7 @@ private:
  *
  */
 NegObstc::NegObstc()
-  : it(nh)
-  , temporalGridMap({ "elevation" })
-  , cannyGridMap({ "canny" })
-  , laplaceGridMap({ "laplacian" })
-  , sobelGridMap({ "sobel" })
-  , sobelGxGridMap({ "sobelX" })
-  , sobelGyGridMap({ "sobelY" })
+    : it(nh), temporalGridMap({"density"}), cannyGridMap({"canny"}), laplaceGridMap({"laplacian"}), sobelGridMap({"sobel"}), sobelGxGridMap({"sobelX"}), sobelGyGridMap({"sobelY"})
 {
   /*publishers and subscribers*/
   density_pub = nh.advertise<nav_msgs::OccupancyGrid>("density_pub", 1, true);
@@ -186,34 +182,34 @@ void NegObstc::GetPointCloud(const sensor_msgs::PointCloud2ConstPtr &cloud_msg)
 
 void NegObstc::ImageConversion()
 {
-  msg_density = cv_bridge::CvImage{ header, "mono8", temporal_image }.toImageMsg();
+  msg_density = cv_bridge::CvImage{header, "mono8", temporal_image}.toImageMsg();
 
-  msg_canny = cv_bridge::CvImage{ header, "mono8", canny_img }.toImageMsg();
+  msg_canny = cv_bridge::CvImage{header, "mono8", canny_img}.toImageMsg();
   grid_map::GridMapRosConverter::initializeFromImage(*msg_canny, pace, cannyGridMap);
   grid_map::GridMapRosConverter::addLayerFromImage(*msg_canny, "canny", cannyGridMap, 0, 255, 255);
-  grid_map::GridMapRosConverter::toOccupancyGrid(cannyGridMap, "canny", 0, 255, cannyGrid);
+  grid_map::GridMapRosConverter::toOccupancyGrid(cannyGridMap, "canny", 150, 255, cannyGrid);
   cannyGrid.info = info;
 
-  msg_laplace = cv_bridge::CvImage{ header, "mono8", laplace_img }.toImageMsg();
+  msg_laplace = cv_bridge::CvImage{header, "mono8", laplace_img}.toImageMsg();
   grid_map::GridMapRosConverter::initializeFromImage(*msg_laplace, pace, laplaceGridMap);
   grid_map::GridMapRosConverter::addLayerFromImage(*msg_laplace, "laplacian", laplaceGridMap, 0, 255, 255);
-  grid_map::GridMapRosConverter::toOccupancyGrid(laplaceGridMap, "laplacian", 0, 255, laplaceGrid);
+  grid_map::GridMapRosConverter::toOccupancyGrid(laplaceGridMap, "laplacian", 175, 255, laplaceGrid);
   laplaceGrid.info = info;
 
-  msg_sobel = cv_bridge::CvImage{ header, "mono8", sobel_img }.toImageMsg();
+  msg_sobel = cv_bridge::CvImage{header, "mono8", sobel_img}.toImageMsg();
   grid_map::GridMapRosConverter::initializeFromImage(*msg_sobel, pace, sobelGridMap);
   grid_map::GridMapRosConverter::addLayerFromImage(*msg_sobel, "sobel", sobelGridMap, 0, 255, 125);
-  grid_map::GridMapRosConverter::toOccupancyGrid(sobelGridMap, "sobel", 0, 255, sobelGrid);
+  grid_map::GridMapRosConverter::toOccupancyGrid(sobelGridMap, "sobel", 130, 255, sobelGrid);
 
-  msg_sobelX = cv_bridge::CvImage{ header, "mono8", sobel_grad_x }.toImageMsg();
+  msg_sobelX = cv_bridge::CvImage{header, "mono8", sobel_grad_x}.toImageMsg();
   grid_map::GridMapRosConverter::initializeFromImage(*msg_sobelX, pace, sobelGxGridMap);
   grid_map::GridMapRosConverter::addLayerFromImage(*msg_sobelX, "sobelX", sobelGxGridMap, 0, 255, 125);
-  grid_map::GridMapRosConverter::toOccupancyGrid(sobelGxGridMap, "sobelX", 0, 255, sobelGxGrid);
+  grid_map::GridMapRosConverter::toOccupancyGrid(sobelGxGridMap, "sobelX", 150, 255, sobelGxGrid);
 
-  msg_sobelY = cv_bridge::CvImage{ header, "mono8", sobel_grad_y }.toImageMsg();
+  msg_sobelY = cv_bridge::CvImage{header, "mono8", sobel_grad_y}.toImageMsg();
   grid_map::GridMapRosConverter::initializeFromImage(*msg_sobelY, pace, sobelGyGridMap);
   grid_map::GridMapRosConverter::addLayerFromImage(*msg_sobelY, "sobelY", sobelGyGridMap, 0, 255, 125);
-  grid_map::GridMapRosConverter::toOccupancyGrid(sobelGyGridMap, "sobelY", 0, 255, sobelGyGrid);
+  grid_map::GridMapRosConverter::toOccupancyGrid(sobelGyGridMap, "sobelY", 150, 255, sobelGyGrid);
   sobelGrid.info = sobelGxGrid.info = sobelGyGrid.info = info;
 }
 
@@ -223,21 +219,27 @@ void NegObstc::ImageConversion()
  */
 void NegObstc::EdgeDetection()
 {
-  int kernel_size = 3;
+  int x, y, kernel_size = 3;
 
-  grid_map::GridMapRosConverter::fromOccupancyGrid(densityGrid, "elevation", temporalGridMap);
-  grid_map::GridMapCvConverter::toImage<unsigned char, 1>(temporalGridMap, "elevation", CV_8UC1, temporal_image);
+  grid_map::GridMapRosConverter::fromOccupancyGrid(densityGrid, "density", temporalGridMap);
+  grid_map::GridMapCvConverter::toImage<unsigned char, 1>(temporalGridMap, "density", CV_8UC1, temporal_image);
   /* Create a matrix of the same type and size as src (for canny_img edge detection)*/
   canny_img.create(temporal_image.size(), temporal_image.type());
   /* Reduce noise with a kernel 3x3*/
-  cv::blur(temporal_image, blur_img, cv::Size(3, 3));
+  // cv::blur(temporal_image, blur_img, cv::Size(3, 3));
+  cv::threshold(temporal_image, blur_img, 170, 255, cv::THRESH_OTSU);
+  int nz = cv::countNonZero(temporal_image);
+  temporal_image.at<uchar>(y, x) = 0;
+  if (nz < N / 2)
+    cv::threshold(blur_img, blur_img, 150, 255, cv::THRESH_BINARY_INV);
   /* Canny detector*/
-  cv::Canny(temporal_image, detected_edges, 150, 255, 3);
+  cv::Canny(blur_img, detected_edges, 200, 255, 3);
   canny_img = cv::Scalar::all(0);
   temporal_image.copyTo(canny_img, detected_edges);
   /* Laplacian detector */
   cv::Laplacian(temporal_image, laplace_img, CV_16S, kernel_size, 1, 0, cv::BORDER_DEFAULT);
   convertScaleAbs(laplace_img, laplace_img);
+  cv::fastNlMeansDenoising(laplace_img, laplace_img, 3, 7, 21);
   /* Sobel - Gradient X */
   // Scharr( src_gray, grad_x, ddepth, 1, 0, scale, delta, BORDER_DEFAULT );
   cv::Sobel(temporal_image, sobel_grad_x, CV_16S, 1, 0, kernel_size, 1, 0, cv::BORDER_DEFAULT);
@@ -252,12 +254,12 @@ void NegObstc::EdgeDetection()
 
 void NegObstc::DensityCalculation()
 {
-  pace = 0.4;  //((float)((int)(pace * 10))) / 10;
+  pace = 0.4; //((float)((int)(pace * 10))) / 10;
   nl = 40 / pace;
   nc = 40 / pace;
   N = nc * nl;
   j = s = lin = col = 0;
-  norm = (float)floor(454 / carVelocity * std::pow(pace, 2));
+  norm = (float)floor((200 * std::pow(pace, 2)) / (carVelocity * 0.5));
 
   /*clearing grid data*/
   density_points.clear();
@@ -298,10 +300,6 @@ void NegObstc::DensityCalculation()
   }
   max = densityMatrix.maxCoeff();
   ROS_WARN("Norm value: %f; Max density: %f; ponto 200: %d", norm, max, density_points[5500]);
-   for (auto const& value: density_points)
-   {
-
-   }
   densityGrid.data = density_points;
   densityGridUp.data = density_points_up;
   densityGridDown.data = density_points_down;
