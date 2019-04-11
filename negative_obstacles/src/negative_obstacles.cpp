@@ -93,7 +93,13 @@ private:
  *
  */
 NegObstc::NegObstc()
-    : it(nh), temporalGridMap({"density"}), cannyGridMap({"canny"}), laplaceGridMap({"laplacian"}), sobelGridMap({"sobel"}), sobelGxGridMap({"sobelX"}), sobelGyGridMap({"sobelY"})
+  : it(nh)
+  , temporalGridMap({ "density" })
+  , cannyGridMap({ "canny" })
+  , laplaceGridMap({ "laplacian" })
+  , sobelGridMap({ "sobel" })
+  , sobelGxGridMap({ "sobelX" })
+  , sobelGyGridMap({ "sobelY" })
 {
   /*publishers and subscribers*/
   density_pub = nh.advertise<nav_msgs::OccupancyGrid>("density_pub", 1, true);
@@ -145,8 +151,7 @@ void NegObstc::Publishers()
 {
   /*occupancy grids*/
   density_pub.publish(densityGrid);
-  // density_pub_up.publish(densityGridUp);
-  // density_pub_down.publish(densityGridDown);
+
   grad_pub.publish(gradGrid);
   grad_x_pub.publish(gradXGrid);
   grad_y_pub.publish(gradYGrid);
@@ -182,31 +187,31 @@ void NegObstc::GetPointCloud(const sensor_msgs::PointCloud2ConstPtr &cloud_msg)
 
 void NegObstc::ImageConversion()
 {
-  msg_density = cv_bridge::CvImage{header, "mono8", temporal_image}.toImageMsg();
+  msg_density = cv_bridge::CvImage{ header, "mono8", temporal_image }.toImageMsg();
 
-  msg_canny = cv_bridge::CvImage{header, "mono8", canny_img}.toImageMsg();
+  msg_canny = cv_bridge::CvImage{ header, "mono8", canny_img }.toImageMsg();
   grid_map::GridMapRosConverter::initializeFromImage(*msg_canny, pace, cannyGridMap);
   grid_map::GridMapRosConverter::addLayerFromImage(*msg_canny, "canny", cannyGridMap, 0, 255, 255);
   grid_map::GridMapRosConverter::toOccupancyGrid(cannyGridMap, "canny", 150, 255, cannyGrid);
   cannyGrid.info = info;
 
-  msg_laplace = cv_bridge::CvImage{header, "mono8", laplace_img}.toImageMsg();
+  msg_laplace = cv_bridge::CvImage{ header, "mono8", laplace_img }.toImageMsg();
   grid_map::GridMapRosConverter::initializeFromImage(*msg_laplace, pace, laplaceGridMap);
   grid_map::GridMapRosConverter::addLayerFromImage(*msg_laplace, "laplacian", laplaceGridMap, 0, 255, 255);
   grid_map::GridMapRosConverter::toOccupancyGrid(laplaceGridMap, "laplacian", 175, 255, laplaceGrid);
   laplaceGrid.info = info;
 
-  msg_sobel = cv_bridge::CvImage{header, "mono8", sobel_img}.toImageMsg();
+  msg_sobel = cv_bridge::CvImage{ header, "mono8", sobel_img }.toImageMsg();
   grid_map::GridMapRosConverter::initializeFromImage(*msg_sobel, pace, sobelGridMap);
   grid_map::GridMapRosConverter::addLayerFromImage(*msg_sobel, "sobel", sobelGridMap, 0, 255, 125);
   grid_map::GridMapRosConverter::toOccupancyGrid(sobelGridMap, "sobel", 130, 255, sobelGrid);
 
-  msg_sobelX = cv_bridge::CvImage{header, "mono8", sobel_grad_x}.toImageMsg();
+  msg_sobelX = cv_bridge::CvImage{ header, "mono8", sobel_grad_x }.toImageMsg();
   grid_map::GridMapRosConverter::initializeFromImage(*msg_sobelX, pace, sobelGxGridMap);
   grid_map::GridMapRosConverter::addLayerFromImage(*msg_sobelX, "sobelX", sobelGxGridMap, 0, 255, 125);
   grid_map::GridMapRosConverter::toOccupancyGrid(sobelGxGridMap, "sobelX", 150, 255, sobelGxGrid);
 
-  msg_sobelY = cv_bridge::CvImage{header, "mono8", sobel_grad_y}.toImageMsg();
+  msg_sobelY = cv_bridge::CvImage{ header, "mono8", sobel_grad_y }.toImageMsg();
   grid_map::GridMapRosConverter::initializeFromImage(*msg_sobelY, pace, sobelGyGridMap);
   grid_map::GridMapRosConverter::addLayerFromImage(*msg_sobelY, "sobelY", sobelGyGridMap, 0, 255, 125);
   grid_map::GridMapRosConverter::toOccupancyGrid(sobelGyGridMap, "sobelY", 150, 255, sobelGyGrid);
@@ -233,13 +238,13 @@ void NegObstc::EdgeDetection()
   if (nz < N / 2)
     cv::threshold(blur_img, blur_img, 150, 255, cv::THRESH_BINARY_INV);
   /* Canny detector*/
-  cv::Canny(blur_img, detected_edges, 200, 255, 3);
+  cv::Canny(temporal_image, detected_edges, 200, 255, 3);
   canny_img = cv::Scalar::all(0);
   temporal_image.copyTo(canny_img, detected_edges);
   /* Laplacian detector */
   cv::Laplacian(temporal_image, laplace_img, CV_16S, kernel_size, 1, 0, cv::BORDER_DEFAULT);
   convertScaleAbs(laplace_img, laplace_img);
-  cv::fastNlMeansDenoising(laplace_img, laplace_img, 3, 7, 21);
+  // cv::fastNlMeansDenoising(laplace_img, laplace_img, 3, 7, 21);
   /* Sobel - Gradient X */
   // Scharr( src_gray, grad_x, ddepth, 1, 0, scale, delta, BORDER_DEFAULT );
   cv::Sobel(temporal_image, sobel_grad_x, CV_16S, 1, 0, kernel_size, 1, 0, cv::BORDER_DEFAULT);
@@ -254,7 +259,7 @@ void NegObstc::EdgeDetection()
 
 void NegObstc::DensityCalculation()
 {
-  pace = 0.4; //((float)((int)(pace * 10))) / 10;
+  pace = 0.4;  //((float)((int)(pace * 10))) / 10;
   nl = 40 / pace;
   nc = 40 / pace;
   N = nc * nl;
@@ -264,10 +269,6 @@ void NegObstc::DensityCalculation()
   /*clearing grid data*/
   density_points.clear();
   density_points.resize(N);
-  density_points_up.clear();
-  density_points_up.resize(100 * 100);
-  density_points_down.clear();
-  density_points_down.resize(80 * 80);
   densityMatrix.resize(nl, nc);
   densityMatrix.setZero(nl, nc);
 
@@ -282,27 +283,22 @@ void NegObstc::DensityCalculation()
       lin = (int)floor(point.x / pace);
       col = (int)floor(point.y / pace) + 20 / pace;
 
-      lin_up = (int)floor(point.x / 0.4);
-      col_up = (int)floor(point.y / 0.4) + 20 / 0.4;
-
-      lin_down = (int)floor(point.x / 0.5);
-      col_down = (int)floor(point.y / 0.5) + 20 / 0.5;
-
       if (lin < nl && col < nc)
         densityMatrix(lin, col) += 1;
       if (lin + col * nl < N)
       {
         density_points[lin + col * nl] += 1;
-        density_points_up[lin_up + col_up * 100] += 1;
-        density_points_down[lin_down + col_down * 80] += 1;
       }
     }
   }
   max = densityMatrix.maxCoeff();
-  ROS_WARN("Norm value: %f; Max density: %f; ponto 200: %d", norm, max, density_points[5500]);
+  densityMatrix = densityMatrix * (100 / max);
+  ROS_WARN("Norm value: %f; Max density: %f; ponto 5500: %d", norm, max, density_points[5500]);
+  for (int it = 0; it < N; it++)
+  {
+    density_points[it] = density_points[it] / max * 100;
+  }
   densityGrid.data = density_points;
-  densityGridUp.data = density_points_up;
-  densityGridDown.data = density_points_down;
 }
 void NegObstc::GradientCalculation()
 {
@@ -341,13 +337,6 @@ void NegObstc::GradientCalculation()
   densityGrid.info = densityGridUp.info = densityGridDown.info = info;
   gradGrid.info = gradXGrid.info = gradYGrid.info = info_grad;
   sobelGxGrid.info = sobelGyGrid.info = prewittGrid.info = kirshGrid.info = info_sobel;
-
-  densityGridUp.info.height = densityGridUp.info.width = 100;
-  densityGridUp.info.origin.position.z = 40;
-  densityGridDown.info.height = densityGridDown.info.width = 80;
-  densityGridDown.info.resolution = 0.5;
-  densityGridUp.info.resolution = 0.4;
-  densityGridDown.info.origin.position.z = 20;
 
   /*cubelist marker with gradient colorbar*/
   gradient_2d grad[nc - 1][nl - 1];
