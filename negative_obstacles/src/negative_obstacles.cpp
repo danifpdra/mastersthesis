@@ -177,7 +177,7 @@ void NegObstc::getVelocity(const novatel_gps_msgs::InspvaPtr &velMsg)
   carVelocity =
       sqrt(std::pow(velMsg->north_velocity, 2) + std::pow(velMsg->east_velocity, 2) + std::pow(velMsg->up_velocity, 2));
 
-  ROS_WARN("Car velocity: %f", carVelocity);
+  // ROS_WARN("Car velocity: %f", carVelocity);s
 }
 
 void NegObstc::GetPointCloud(const sensor_msgs::PointCloud2ConstPtr &cloud_msg)
@@ -293,7 +293,7 @@ void NegObstc::DensityCalculation()
   }
   max = densityMatrix.maxCoeff();
   densityMatrix = densityMatrix * (100 / max);
-  ROS_WARN("Norm value: %f; Max density: %f; ponto 5500: %d", norm, max, density_points[5500]);
+  // // ROS_WARN("Norm value: %f; Max density: %f; ponto 5500: %d", norm, max, density_points[5500]);
   for (int it = 0; it < N; it++)
   {
     density_points[it] = density_points[it] / max * 100;
