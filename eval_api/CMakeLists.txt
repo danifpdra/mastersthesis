@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(eval_api)
+set(PROG eval_api)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 add_compile_options(-std=c++11)
@@ -25,6 +26,9 @@ find_package(catkin REQUIRED COMPONENTS
 )
 find_package(cmake_modules)
 find_package(Eigen REQUIRED)
+find_package(PkgConfig REQUIRED)
+
+PKG_CHECK_MODULES(GTK REQUIRED gtk+-3.0)
 
 
 ## System dependencies are found with CMake's conventions
@@ -119,7 +123,7 @@ find_package(Eigen REQUIRED)
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-  INCLUDE_DIRS include
+  INCLUDE_DIRS #include
   #LIBRARIES negative_obstacles
   # CATKIN_DEPENDS roscpp rospy std_msgs
   DEPENDS Eigen
@@ -134,6 +138,7 @@ catkin_package(
 include_directories(
   ${catkin_INCLUDE_DIRS}
   ${Eigen_INCLUDE_DIRS}
+  ${GTK_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
@@ -149,9 +154,12 @@ include_directories(
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-add_executable(negative_obstacles src/negative_obstacles.cpp)
+add_executable(${PROG} src/eval_api.cpp)
 link_directories(${PCL_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS})
+
+link_directories(${GTK_LIBRARY_DIRS})
+add_definitions(${GTK_CFLAGS_OTHER})
 
 # make sure configure headers are built before any node using them
 
@@ -166,12 +174,22 @@ add_definitions(${PCL_DEFINITIONS})
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
- target_link_libraries(negative_obstacles
+ target_link_libraries(${PROG}
    ${catkin_LIBRARIES}
    ${Eigen_LIBRARIES}
    ${OpenCV_LIBS}
+   ${GTK_LIBRARIES}
 )
 
+
+# --- add custom mtargets (and dependencies)
+add_custom_target( cpfiles
+                COMMAND cp "${PROJECT_SOURCE_DIR}/src/*.glade" "${PROJECT_BINARY_DIR}"
+                COMMAND cp "${PROJECT_SOURCE_DIR}/src/*.png" "${PROJECT_BINARY_DIR}" || :
+                 )
+
+#Add dependencies
+add_dependencies(${PROG} cpfiles)
 #############
 ## Install ##
 #############
