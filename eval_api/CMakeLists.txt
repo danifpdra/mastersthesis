@@ -123,7 +123,7 @@ PKG_CHECK_MODULES(GTK REQUIRED gtk+-3.0)
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-  INCLUDE_DIRS #include
+  INCLUDE_DIRS include
   #LIBRARIES negative_obstacles
   # CATKIN_DEPENDS roscpp rospy std_msgs
   DEPENDS Eigen
@@ -139,6 +139,7 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
   ${Eigen_INCLUDE_DIRS}
   ${GTK_INCLUDE_DIRS}
+  include
 )
 
 ## Declare a C++ library
@@ -161,6 +162,15 @@ add_definitions(${PCL_DEFINITIONS})
 link_directories(${GTK_LIBRARY_DIRS})
 add_definitions(${GTK_CFLAGS_OTHER})
 
+
+# link_directories(${LIB_DIRS} -losmgpsmap-1.0)
+# add_definitions(${INCDLUDE_DIRS} -osmgpsmap-1.0)
+# include_directories(usr/include)
+# link_directories(usr/lib)
+# link_directories(/usr/lib/x86_64-linux-gnu)
+# link_directories(/usr/share/doc/libosmgpsmap-1.0-1)
+
+
 # make sure configure headers are built before any node using them
 
 ## Rename C++ executable without prefix
@@ -179,6 +189,8 @@ add_definitions(${GTK_CFLAGS_OTHER})
    ${Eigen_LIBRARIES}
    ${OpenCV_LIBS}
    ${GTK_LIBRARIES}
+  #  libosmgpsmap-1.0-1
+  #  osmgpsmap-1.0
 )
 
 

@@ -8,11 +8,16 @@
 #include <boost/foreach.hpp>
 /*math*/
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 #include <algorithm>
 #include <cmath>
+#include <ctime>
 #include <fstream>
 #include <iostream>
+#include <sstream>
+#include <string>
 #include <vector>
 /*msgs*/
 #include <novatel_gps_msgs/Inspva.h>
@@ -34,8 +39,12 @@
 
 #include <gdk/gdkkeysyms.h>
 #include <glib.h>
+#include "osmgpsmap-1.0/osm-gps-map.h"
 
-#include "osm-gps-map.h"
+#include <unistd.h>                      //Sleep
+#include <eval_api/GoogleEarthPath.hpp>  //This class
+
+using namespace std;
 
 class QuantEval
 {
@@ -43,6 +52,8 @@ public:
   QuantEval();
   void LoopFunction();
   void GtkLaunch();
+  void CloseHandle();
+  void StartHandle();
 
 private:
   ros::NodeHandle nh;
@@ -66,7 +77,6 @@ private:
   {
   }
 
-  OsmGpsMapPoint coord;
   float lat, lon;
   GtkWidget *widget;
   OsmGpsMap *map;
@@ -74,25 +84,50 @@ private:
   char *gladeFile = (char *)"/home/daniela/catkin_ws/src/mastersthesis/eval_api/src/eval_api.glade";
   int ret;
   ros::Subscriber velocity_sub;
-
   void getVelocity(const novatel_gps_msgs::InspvaPtr &velMsg);
+  std::string FormatPlacemark(float lat1, float lon1);
+
+  /***********************************************/
+  // write kml file
+  std::ofstream handle;
+  /*********************************************/
 };
 
-void NegObstc::getVelocity(const novatel_gps_msgs::InspvaPtr &velMsg)
+void QuantEval::StartHandle()
+{
+  handle.exceptions(std::ofstream::failbit | std::ofstream::badbit);
+
+  char filename[100];
+  int writeCount = std::rand();
+  sprintf(filename, "/home/daniela/catkin_ws/src/mastersthesis/eval_api/Results/Sample_%d.kml", writeCount);
+  // Open the KML file for writing:
+  handle.open(filename);
+  // Write to the KML file:
+  handle << "<?xml version='1.0' encoding='utf-8'?>\n";
+  handle << "<kml xmlns='http://www.opengis.net/kml/2.2'>\n";
+  handle << "<Placemark>\n";
+  handle << "<description>This is the path between the 2 points</description>\n";
+  handle << "<styleUrl>#pathstyle</styleUrl>\n";
+  handle << "<LineString>\n";
+  handle << "<tessellate>1</tessellate>\n";
+  handle << "<coordinates>";
+}
+
+void QuantEval::getVelocity(const novatel_gps_msgs::InspvaPtr &velMsg)
 {
   lat = velMsg->latitude;
   lon = velMsg->longitude;
 }
 
-// bag.close();
-
 QuantEval::QuantEval()
 {
-  velocity_sub = nh.subscribe("inspva", 10, &NegObstc::getVelocity, this);
+  velocity_sub = nh.subscribe("inspva", 10, &QuantEval::getVelocity, this);
 }
 
 void QuantEval::LoopFunction()
 {
+  std::cout << "latitude: " << std::setprecision(20) << lat << "; longitude: " << lon << std::endl;
+  handle << FormatPlacemark(lat, lon);
 }
 
 void QuantEval::GtkLaunch()
@@ -127,11 +162,15 @@ void QuantEval::GtkLaunch()
   g_signal_connect(G_OBJECT(back_button), "clicked", G_CALLBACK(BackCallback), this);
   g_signal_connect(G_OBJECT(next_button), "clicked", G_CALLBACK(NextCallback), this);
   g_signal_connect(G_OBJECT(ok_button), "clicked", G_CALLBACK(FinishCallback), this);
+}
 
-  map = OSM_GPS_MAP(widget);
-  osm_gps_map_point_set_degrees(&coord, &lat, &lon);
-
-  std::cout << "end" << std::endl;
+void QuantEval::CloseHandle()
+{
+  handle << "</coordinates>\n";
+  handle << "</LineString>\n";
+  handle << "</Placemark>\n";
+  handle << "</kml>\n";
+  handle.close();
 }
 
 /**
@@ -143,11 +182,13 @@ void QuantEval::GtkLaunch()
  */
 int main(int argc, char **argv)
 {
+  srand(time(NULL));
   ros::init(argc, argv, "QuantEval");
   gtk_init(&argc, &argv);
   QuantEval reconstruct;
-  reconstruct.GtkLaunch();
-  gtk_main();
+  reconstruct.StartHandle();
+  // reconstruct.GtkLaunch();
+  // gtk_main();
 
   ros::Rate rate(50);
   while (ros::ok())
@@ -157,5 +198,15 @@ int main(int argc, char **argv)
     rate.sleep();
   }
 
+  reconstruct.CloseHandle();
+
   return 0;
+}
+
+std::string QuantEval::FormatPlacemark(float lat1, float lon1)
+{
+  std::ostringstream ss;
+  if (lon < -7 && lon > -9 && lat > 39 && lat < 41)
+    handle << " " << std::setprecision(20) << lon1 << "," << lat1 << ",0";
+  return ss.str();
 }
