@@ -24,6 +24,7 @@
 #include "nav_msgs/MapMetaData.h"
 #include "nav_msgs/OccupancyGrid.h"
 #include "std_msgs/Header.h"
+#include "gps_common/GPSFix.h"
 /* openCv*/
 #include <cv_bridge/cv_bridge.h>
 #include <image_transport/image_transport.h>
@@ -84,8 +85,10 @@ private:
   char *gladeFile = (char *)"/home/daniela/catkin_ws/src/mastersthesis/eval_api/src/eval_api.glade";
   int ret;
   ros::Subscriber velocity_sub;
+  ros::Publisher gps_pub;
   void getVelocity(const novatel_gps_msgs::InspvaPtr &velMsg);
   std::string FormatPlacemark(float lat1, float lon1);
+  gps_common::GPSFix gps_msg;
 
   /***********************************************/
   // write kml file
@@ -122,11 +125,15 @@ void QuantEval::getVelocity(const novatel_gps_msgs::InspvaPtr &velMsg)
 QuantEval::QuantEval()
 {
   velocity_sub = nh.subscribe("inspva", 10, &QuantEval::getVelocity, this);
+  gps_pub = nh.advertise<gps_common::GPSFix>("gps_pub", 1, true);
 }
 
 void QuantEval::LoopFunction()
 {
+  gps_msg.latitude=lat;
+  gps_msg.longitude=lon;
   std::cout << "latitude: " << std::setprecision(20) << lat << "; longitude: " << lon << std::endl;
+  gps_pub.publish(gps_msg);
   handle << FormatPlacemark(lat, lon);
 }
 

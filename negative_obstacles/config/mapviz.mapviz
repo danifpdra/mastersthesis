@@ -1,0 +1,97 @@
+capture_directory: ~
+fixed_frame: map
+target_frame: moving_axis
+fix_orientation: false
+rotate_90: false
+enable_antialiasing: true
+show_displays: true
+show_status_bar: true
+show_capture_tools: true
+window_width: 890
+window_height: 684
+view_scale: 0.1558987
+offset_x: -18.86179
+offset_y: -5.588379
+use_latest_transforms: true
+background: "#a0a0a4"
+displays:
+  - type: mapviz_plugins/image
+    name: new display
+    config:
+      visible: false
+      collapsed: true
+      topic: /camera/image_color
+      anchor: top left
+      units: pixels
+      offset_x: 0
+      offset_y: 0
+      width: 320
+      height: 240
+      keep_ratio: false
+      image_transport: default
+  - type: mapviz_plugins/tile_map
+    name: new display
+    config:
+      visible: true
+      collapsed: true
+      custom_sources:
+        []
+      bing_api_key: ""
+      source: Stamen (terrain)
+  - type: mapviz_plugins/navsat
+    name: new display
+    config:
+      visible: true
+      collapsed: true
+      topic: /fix
+      color: "#00ff00"
+      draw_style: lines
+      position_tolerance: 0
+      buffer_size: 0
+  - type: mapviz_plugins/occupancy_grid
+    name: new display
+    config:
+      visible: true
+      collapsed: true
+      alpha: 1
+      topic: /density_pub
+      update: true
+      scheme: map
+  - type: mapviz_plugins/odometry
+    name: new display
+    config:
+      visible: true
+      collapsed: true
+      topic: /odom
+      color: "#00ff00"
+      draw_style: lines
+      position_tolerance: 0
+      buffer_size: 0
+      show_laps: false
+      show_covariance: false
+      static_arrow_sizes: false
+      arrow_size: 25
+      show_timestamps: 0
+  - type: mapviz_plugins/attitude_indicator
+    name: new display
+    config:
+      visible: true
+      collapsed: true
+      topic: /imu_data
+      x: 0
+      y: 0
+      width: 100
+      height: 100
+  - type: mapviz_plugins/gps
+    name: new display
+    config:
+      visible: true
+      collapsed: false
+      topic: /gps_pub
+      color: "#00ff00"
+      draw_style: lines
+      position_tolerance: 0
+      buffer_size: 0
+      show_laps: false
+      static_arrow_sizes: false
+      arrow_size: 25
