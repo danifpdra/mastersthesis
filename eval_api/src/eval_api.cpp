@@ -104,7 +104,7 @@ private:
   std::string FormatPlacemark(float lat1, float lon1);
 };
 
-QuantEval::QuantEval() : str_i({"<coordinates>"}), str_f({"</coordinates>"})
+QuantEval::QuantEval() : str_i({ "<coordinates>" }), str_f({ "</coordinates>" })
 {
   velocity_sub = nh.subscribe("inspva", 10, &QuantEval::getVelocity, this);
   gps_pub = nh.advertise<gps_common::GPSFix>("gps_pub", 1, true);
@@ -158,10 +158,17 @@ void QuantEval::LoopFunction()
 void QuantEval::DrawLimits()
 {
   handle_kml.open("/home/daniela/RightPath.kml");
+
+  if (!myfile.is_open())
+  {
+    std::cout << "could not open file" << std::endl;
+  }
+
   std::stringstream strStream;
   strStream << handle_kml.rdbuf();  // read the file
   file_content = strStream.str();
 
+  handle_kml.close();
   std::cout << file_content << std::endl;
 
   found_i = file_content.find(str_i);
