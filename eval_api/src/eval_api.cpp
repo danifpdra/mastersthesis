@@ -1,3 +1,4 @@
+
 #include <tf/transform_listener.h>
 
 #include <rosbag/bag.h>
@@ -21,10 +22,10 @@
 #include <vector>
 /*msgs*/
 #include <novatel_gps_msgs/Inspva.h>
+#include "gps_common/GPSFix.h"
 #include "nav_msgs/MapMetaData.h"
 #include "nav_msgs/OccupancyGrid.h"
 #include "std_msgs/Header.h"
-#include "gps_common/GPSFix.h"
 /* openCv*/
 #include <cv_bridge/cv_bridge.h>
 #include <image_transport/image_transport.h>
@@ -44,6 +45,11 @@
 
 #include <unistd.h>                      //Sleep
 #include <eval_api/GoogleEarthPath.hpp>  //This class
+
+#include "kml/base/file.h"
+#include "kml/base/string_util.h"
+#include "kml/base/zip_file.h"
+#include "kml/dom.h"
 
 using namespace std;
 
@@ -78,38 +84,52 @@ private:
   {
   }
 
-  float lat, lon;
-  GtkWidget *widget;
-  OsmGpsMap *map;
+  float lat, lon, dx, dy;
   GtkBuilder *builderG;
   char *gladeFile = (char *)"/home/daniela/catkin_ws/src/mastersthesis/eval_api/src/eval_api.glade";
   int ret;
+
+  std::ofstream handle, handle_kml;
   ros::Subscriber velocity_sub;
   ros::Publisher gps_pub;
-  void getVelocity(const novatel_gps_msgs::InspvaPtr &velMsg);
-  std::string FormatPlacemark(float lat1, float lon1);
   gps_common::GPSFix gps_msg;
+  // to read kml
+  std::string file_content;
+  std::string str_i, str_f;
+  std::size_t found_i, found_f;
+  double lat_lim, lon_lim;
 
-  /***********************************************/
-  // write kml file
-  std::ofstream handle;
-  /*********************************************/
+  void getVelocity(const novatel_gps_msgs::InspvaPtr &velMsg);
+  void DrawLimits();
+  std::string FormatPlacemark(float lat1, float lon1);
 };
+
+QuantEval::QuantEval() : str_i({"<coordinates>"}), str_f({"</coordinates>"})
+{
+  velocity_sub = nh.subscribe("inspva", 10, &QuantEval::getVelocity, this);
+  gps_pub = nh.advertise<gps_common::GPSFix>("gps_pub", 1, true);
+}
 
 void QuantEval::StartHandle()
 {
   handle.exceptions(std::ofstream::failbit | std::ofstream::badbit);
 
   char filename[100];
-  int writeCount = std::rand();
-  sprintf(filename, "/home/daniela/catkin_ws/src/mastersthesis/eval_api/Results/Sample_%d.kml", writeCount);
+
+  time_t theTime = time(NULL);
+  struct tm *aTime = localtime(&theTime);
+
+  int hour = aTime->tm_hour;
+  int min = aTime->tm_min;
+
+  sprintf(filename, "/home/daniela/catkin_ws/src/mastersthesis/eval_api/Results/Path_%dH_%dM.kml", hour, min);
   // Open the KML file for writing:
   handle.open(filename);
   // Write to the KML file:
   handle << "<?xml version='1.0' encoding='utf-8'?>\n";
   handle << "<kml xmlns='http://www.opengis.net/kml/2.2'>\n";
   handle << "<Placemark>\n";
-  handle << "<description>This is the path between the 2 points</description>\n";
+  handle << "<description>Path to evaluate road limits' precision</description>\n";
   handle << "<styleUrl>#pathstyle</styleUrl>\n";
   handle << "<LineString>\n";
   handle << "<tessellate>1</tessellate>\n";
@@ -122,19 +142,38 @@ void QuantEval::getVelocity(const novatel_gps_msgs::InspvaPtr &velMsg)
   lon = velMsg->longitude;
 }
 
-QuantEval::QuantEval()
-{
-  velocity_sub = nh.subscribe("inspva", 10, &QuantEval::getVelocity, this);
-  gps_pub = nh.advertise<gps_common::GPSFix>("gps_pub", 1, true);
-}
-
 void QuantEval::LoopFunction()
 {
-  gps_msg.latitude=lat;
-  gps_msg.longitude=lon;
-  std::cout << "latitude: " << std::setprecision(20) << lat << "; longitude: " << lon << std::endl;
-  gps_pub.publish(gps_msg);
+  gps_msg.latitude = lat;
+  gps_msg.longitude = lon;
+
+  // std::cout << "latitude: " << std::setprecision(20) << lat << "; longitude: " << lon << std::endl;
+  if (lon < -7 && lon > -9 && lat > 39 && lat < 41)
+    gps_pub.publish(gps_msg);
   handle << FormatPlacemark(lat, lon);
+
+  DrawLimits();
+}
+
+void QuantEval::DrawLimits()
+{
+  handle_kml.open("/home/daniela/RightPath.kml");
+  std::stringstream strStream;
+  strStream << handle_kml.rdbuf();  // read the file
+  file_content = strStream.str();
+
+  std::cout << file_content << std::endl;
+
+  found_i = file_content.find(str_i);
+  found_f = file_content.find(str_f);
+
+  // kmlbase::File::ReadFileToString("/home/daniela/RightPath.kml", &file_content);
+
+  // std::string strf = file_content.substr(found_i, found_f);
+  // std::cout << strf << std::endl;
+  // kmlengine::GetFeatureLatLon(feature, &lat_lim, &lon_lim);
+  // dx = 0.000025495 * (lat_lim - lat) / 6.73 - 2.925;  // distance between moving_axis and ground has to be subtracted
+  // dy = 0.00002549 * (lon_lim - lon) / 6.73;
 }
 
 void QuantEval::GtkLaunch()
@@ -189,7 +228,6 @@ void QuantEval::CloseHandle()
  */
 int main(int argc, char **argv)
 {
-  srand(time(NULL));
   ros::init(argc, argv, "QuantEval");
   gtk_init(&argc, &argv);
   QuantEval reconstruct;

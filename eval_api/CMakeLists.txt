@@ -126,7 +126,7 @@ catkin_package(
   INCLUDE_DIRS include
   #LIBRARIES negative_obstacles
   # CATKIN_DEPENDS roscpp rospy std_msgs
-  DEPENDS Eigen
+  DEPENDS Eigen kmlconvenience
 )
 
 ###########
