@@ -41,15 +41,15 @@
 
 #include <gdk/gdkkeysyms.h>
 #include <glib.h>
-#include "osmgpsmap-1.0/osm-gps-map.h"
+// #include "osmgpsmap-1.0/osm-gps-map.h"
 
 #include <unistd.h>                      //Sleep
 #include <eval_api/GoogleEarthPath.hpp>  //This class
 
-#include "kml/base/file.h"
-#include "kml/base/string_util.h"
-#include "kml/base/zip_file.h"
-#include "kml/dom.h"
+// #include "kml/base/file.h"
+// #include "kml/base/string_util.h"
+// #include "kml/base/zip_file.h"
+// #include "kml/dom.h"
 
 using namespace std;
 
@@ -159,9 +159,13 @@ void QuantEval::DrawLimits()
 {
   handle_kml.open("/home/daniela/RightPath.kml");
 
-  if (!myfile.is_open())
+  if (!handle_kml.is_open())
   {
     std::cout << "could not open file" << std::endl;
+  }
+  else 
+  {
+    std::cout << "opened file" << std::endl;
   }
 
   std::stringstream strStream;
