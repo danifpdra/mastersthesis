@@ -61,6 +61,7 @@ public:
   void GtkLaunch();
   void CloseHandle();
   void StartHandle();
+  void ReadKml();
 
 private:
   ros::NodeHandle nh;
@@ -89,7 +90,8 @@ private:
   char *gladeFile = (char *)"/home/daniela/catkin_ws/src/mastersthesis/eval_api/src/eval_api.glade";
   int ret;
 
-  std::ofstream handle, handle_kml;
+  std::ofstream handle;
+  std::ifstream handle_kml;
   ros::Subscriber velocity_sub;
   ros::Publisher gps_pub;
   gps_common::GPSFix gps_msg;
@@ -97,10 +99,13 @@ private:
   std::string file_content;
   std::string str_i, str_f;
   std::size_t found_i, found_f;
+  std::stringstream strStream;
   double lat_lim, lon_lim;
+  std::vector<string> coordinates;
+  std::vector<float> lat_vec, lon_vec;
 
   void getVelocity(const novatel_gps_msgs::InspvaPtr &velMsg);
-  void DrawLimits();
+
   std::string FormatPlacemark(float lat1, float lon1);
 };
 
@@ -152,37 +157,62 @@ void QuantEval::LoopFunction()
     gps_pub.publish(gps_msg);
   handle << FormatPlacemark(lat, lon);
 
-  DrawLimits();
+  ReadKml();
 }
 
-void QuantEval::DrawLimits()
+void QuantEval::ReadKml()
 {
+  string line;
   handle_kml.open("/home/daniela/RightPath.kml");
 
   if (!handle_kml.is_open())
-  {
     std::cout << "could not open file" << std::endl;
-  }
-  else 
-  {
+  else
     std::cout << "opened file" << std::endl;
-  }
 
-  std::stringstream strStream;
   strStream << handle_kml.rdbuf();  // read the file
   file_content = strStream.str();
 
-  handle_kml.close();
-  std::cout << file_content << std::endl;
+  found_i = file_content.find(str_i); /*find beginning of coordinates*/
+  found_f = file_content.find(str_f); /*find ending of coordinates*/
 
-  found_i = file_content.find(str_i);
-  found_f = file_content.find(str_f);
+  // std::cout << found_i << " " << found_f << std::endl;
+  handle_kml.close(); /*close handle*/
 
-  // kmlbase::File::ReadFileToString("/home/daniela/RightPath.kml", &file_content);
-
-  // std::string strf = file_content.substr(found_i, found_f);
+  std::string strf = file_content.substr(found_i + 18, found_f - found_i - 19); /*cut string to contemplate only the coordinates*/
   // std::cout << strf << std::endl;
-  // kmlengine::GetFeatureLatLon(feature, &lat_lim, &lon_lim);
+/*separate in coordinates points*/
+  std::stringstream ss(strf);
+  while (ss.good())
+  {
+    string substr;
+    std::getline(ss, substr, ' ');
+    // substr.erase(std::remove_if(substr.begin(), substr.end(), std::isspace), substr.end());
+    coordinates.push_back(substr);
+  }
+
+/*separate in latitude and longitude*/
+  int ncoord = 1;
+  for (auto const &point : coordinates)
+  {
+    // std::cout << point << std::endl;
+    int count = 1;
+    std::stringstream sss(point);
+    while (sss.good())
+    {
+      string string;
+      std::getline(sss, string, ',');
+      std::cout << string << " and " << count << std::endl;
+      if (count == 1 && !string.empty() && ncoord < coordinates.size())
+        lon_vec.push_back(stof(string));
+      if (count == 2 && !string.empty() && ncoord < coordinates.size())
+        lat_vec.push_back(stof(string));
+      count++;
+    }
+    ncoord++;
+  }
+
+  // std::cout << "longitude vector: " << lon_vec << "; latitude vector: " << lat_vec << std::endl;
   // dx = 0.000025495 * (lat_lim - lat) / 6.73 - 2.925;  // distance between moving_axis and ground has to be subtracted
   // dy = 0.00002549 * (lon_lim - lon) / 6.73;
 }
@@ -243,6 +273,7 @@ int main(int argc, char **argv)
   gtk_init(&argc, &argv);
   QuantEval reconstruct;
   reconstruct.StartHandle();
+  // reconstruct.ReadKml();
   // reconstruct.GtkLaunch();
   // gtk_main();
 
