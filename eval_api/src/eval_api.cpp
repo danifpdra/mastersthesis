@@ -102,11 +102,12 @@ private:
   std::stringstream strStream;
   double lat_lim, lon_lim;
   std::vector<string> coordinates;
-  std::vector<float> lat_vec, lon_vec;
+  std::vector<float> lat_vec, lon_vec, lat_meters, lon_meters;
 
   void getVelocity(const novatel_gps_msgs::InspvaPtr &velMsg);
 
   std::string FormatPlacemark(float lat1, float lon1);
+  void DistanceToCar();
 };
 
 QuantEval::QuantEval() : str_i({ "<coordinates>" }), str_f({ "</coordinates>" })
@@ -157,7 +158,7 @@ void QuantEval::LoopFunction()
     gps_pub.publish(gps_msg);
   handle << FormatPlacemark(lat, lon);
 
-  ReadKml();
+  // ReadKml();
 }
 
 void QuantEval::ReadKml()
@@ -179,9 +180,10 @@ void QuantEval::ReadKml()
   // std::cout << found_i << " " << found_f << std::endl;
   handle_kml.close(); /*close handle*/
 
-  std::string strf = file_content.substr(found_i + 18, found_f - found_i - 19); /*cut string to contemplate only the coordinates*/
+  std::string strf =
+      file_content.substr(found_i + 18, found_f - found_i - 19); /*cut string to contemplate only the coordinates*/
   // std::cout << strf << std::endl;
-/*separate in coordinates points*/
+  /*separate in coordinates points*/
   std::stringstream ss(strf);
   while (ss.good())
   {
@@ -191,7 +193,7 @@ void QuantEval::ReadKml()
     coordinates.push_back(substr);
   }
 
-/*separate in latitude and longitude*/
+  /*separate in latitude and longitude*/
   int ncoord = 1;
   for (auto const &point : coordinates)
   {
@@ -202,7 +204,7 @@ void QuantEval::ReadKml()
     {
       string string;
       std::getline(sss, string, ',');
-      std::cout << string << " and " << count << std::endl;
+      // std::cout << string << " and " << count << std::endl;
       if (count == 1 && !string.empty() && ncoord < coordinates.size())
         lon_vec.push_back(stof(string));
       if (count == 2 && !string.empty() && ncoord < coordinates.size())
@@ -211,10 +213,18 @@ void QuantEval::ReadKml()
     }
     ncoord++;
   }
+}
 
-  // std::cout << "longitude vector: " << lon_vec << "; latitude vector: " << lat_vec << std::endl;
-  // dx = 0.000025495 * (lat_lim - lat) / 6.73 - 2.925;  // distance between moving_axis and ground has to be subtracted
-  // dy = 0.00002549 * (lon_lim - lon) / 6.73;
+void QuantEval::DistanceToCar()
+{
+  for (int i = 0; i < coordinates.size(); i++)
+  {
+    lat_lim = 0.000025495 * (lat_vec[i] - lat) / 6.73 - 2.925;
+    lon_lim = 0.00002549 * (lon_vec[i] - lon) / 6.73;
+    lat_meters.push_back(lat_lim);
+    // distance between moving_axis and ground has to be subtracted
+    lon_meters.push_back(lon_lim);
+  }
 }
 
 void QuantEval::GtkLaunch()
@@ -251,15 +261,6 @@ void QuantEval::GtkLaunch()
   g_signal_connect(G_OBJECT(ok_button), "clicked", G_CALLBACK(FinishCallback), this);
 }
 
-void QuantEval::CloseHandle()
-{
-  handle << "</coordinates>\n";
-  handle << "</LineString>\n";
-  handle << "</Placemark>\n";
-  handle << "</kml>\n";
-  handle.close();
-}
-
 /**
  * @brief main function
  *
@@ -273,7 +274,7 @@ int main(int argc, char **argv)
   gtk_init(&argc, &argv);
   QuantEval reconstruct;
   reconstruct.StartHandle();
-  // reconstruct.ReadKml();
+  reconstruct.ReadKml();
   // reconstruct.GtkLaunch();
   // gtk_main();
 
@@ -296,4 +297,13 @@ std::string QuantEval::FormatPlacemark(float lat1, float lon1)
   if (lon < -7 && lon > -9 && lat > 39 && lat < 41)
     handle << " " << std::setprecision(20) << lon1 << "," << lat1 << ",0";
   return ss.str();
+}
+
+void QuantEval::CloseHandle()
+{
+  handle << "</coordinates>\n";
+  handle << "</LineString>\n";
+  handle << "</Placemark>\n";
+  handle << "</kml>\n";
+  handle.close();
 }
