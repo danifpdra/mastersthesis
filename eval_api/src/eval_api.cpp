@@ -58,7 +58,6 @@ class QuantEval
 public:
   QuantEval();
   void LoopFunction();
-  void GtkLaunch();
   void CloseHandle();
   void StartHandle();
   void ReadKml();
@@ -66,54 +65,42 @@ public:
 private:
   ros::NodeHandle nh;
 
-  // void FinishCallback(GtkWidget *windows, gpointer data);
-  // void NextCallback(GtkWidget *windows, gpointer data);
-  // void BackCallback(GtkWidget *windows, gpointer data);
-
-  static void FinishCallback(GtkWidget *windows, gpointer *data)
-  {
-    gtk_main_quit();
-    // main::quit();
-    // cv::imwrite("~/catkin_ws/src/mastersthesis/eval_api/Results/image_XXX.jpg", gray_image);
-  }
-
-  static void NextCallback(GtkWidget *windows, gpointer *data)
-  {
-  }
-
-  static void BackCallback(GtkWidget *windows, gpointer *data)
-  {
-  }
-
-  float lat, lon, dx, dy;
-  GtkBuilder *builderG;
-  char *gladeFile = (char *)"/home/daniela/catkin_ws/src/mastersthesis/eval_api/src/eval_api.glade";
-  int ret;
+  float car_lat, car_lon, dx, dy, pace;
+  int lin, col, nl, nc, N;
 
   std::ofstream handle;
-  std::ifstream handle_kml;
-  ros::Subscriber velocity_sub;
-  ros::Publisher gps_pub;
+  std::ifstream handle_kml_right, handle_kml_left;
+  ros::Subscriber velocity_sub, grid_sub;
+  ros::Publisher gps_pub, gt_pub;
   gps_common::GPSFix gps_msg;
   // to read kml
-  std::string file_content;
+  std::string file_content_right, file_content_left;
   std::string str_i, str_f;
-  std::size_t found_i, found_f;
-  std::stringstream strStream;
-  double lat_lim, lon_lim;
-  std::vector<string> coordinates;
-  std::vector<float> lat_vec, lon_vec, lat_meters, lon_meters;
+  std::size_t found_i_r, found_f_r, found_i_l, found_f_l;
+  std::stringstream strStream_r, strStream_l;
+  std::vector<string> coordinates_right, coordinates_left;
+  std::vector<float> lat_right, lat_left, lon_right, lon_left, lat_dx_meters, lon_dy_meters;
+  std::vector<int8_t> gt_points;
+
+  std_msgs::Header header;
+  nav_msgs::MapMetaData info;
+  nav_msgs::OccupancyGrid GTGrid;
 
   void getVelocity(const novatel_gps_msgs::InspvaPtr &velMsg);
-
+  void getGrid(const nav_msgs::OccupancyGrid &msgGrid);
   std::string FormatPlacemark(float lat1, float lon1);
   void DistanceToCar();
+  float DistFrom(float lat1, float lon1);
+  float ToRadians(float degrees);
 };
 
 QuantEval::QuantEval() : str_i({ "<coordinates>" }), str_f({ "</coordinates>" })
 {
   velocity_sub = nh.subscribe("inspva", 10, &QuantEval::getVelocity, this);
+  grid_sub = nh.subscribe("density_pub", 10, &QuantEval::getGrid, this);
+
   gps_pub = nh.advertise<gps_common::GPSFix>("gps_pub", 1, true);
+  gt_pub = nh.advertise<nav_msgs::OccupancyGrid>("gt_pub", 1, true);
 }
 
 void QuantEval::StartHandle()
@@ -144,58 +131,82 @@ void QuantEval::StartHandle()
 
 void QuantEval::getVelocity(const novatel_gps_msgs::InspvaPtr &velMsg)
 {
-  lat = velMsg->latitude;
-  lon = velMsg->longitude;
+  car_lat = velMsg->latitude;
+  car_lon = velMsg->longitude;
+}
+
+void QuantEval::getGrid(const nav_msgs::OccupancyGrid &msgGrid)
+{
+  info = msgGrid.info;
+  header = msgGrid.header;
+
+  nc = msgGrid.info.height;
+  nl = msgGrid.info.width;
+  pace = msgGrid.info.resolution;
 }
 
 void QuantEval::LoopFunction()
 {
-  gps_msg.latitude = lat;
-  gps_msg.longitude = lon;
+  gps_msg.latitude = car_lat;
+  gps_msg.longitude = car_lon;
 
   // std::cout << "latitude: " << std::setprecision(20) << lat << "; longitude: " << lon << std::endl;
-  if (lon < -7 && lon > -9 && lat > 39 && lat < 41)
+  if (car_lon < -7 && car_lon > -9 && car_lat > 39 && car_lat < 41)
     gps_pub.publish(gps_msg);
-  handle << FormatPlacemark(lat, lon);
+  handle << FormatPlacemark(car_lat, car_lon);
 
-  // ReadKml();
+  DistanceToCar();
+  gt_pub.publish(GTGrid);
 }
 
 void QuantEval::ReadKml()
 {
-  string line;
-  handle_kml.open("/home/daniela/RightPath.kml");
+  handle_kml_right.open("/home/daniela/RightPath.kml");
+  handle_kml_left.open("/home/daniela/LeftPath.kml");
 
-  if (!handle_kml.is_open())
+  if (!handle_kml_right.is_open() || !handle_kml_left.is_open())
     std::cout << "could not open file" << std::endl;
   else
-    std::cout << "opened file" << std::endl;
+  {
+    std::cout << "opened files" << std::endl;
+    strStream_r << handle_kml_right.rdbuf();  // read the file
+    file_content_right = strStream_r.str();
 
-  strStream << handle_kml.rdbuf();  // read the file
-  file_content = strStream.str();
+    strStream_l << handle_kml_left.rdbuf();  // read the file
+    file_content_left = strStream_l.str();
+  }
 
-  found_i = file_content.find(str_i); /*find beginning of coordinates*/
-  found_f = file_content.find(str_f); /*find ending of coordinates*/
+  found_i_r = file_content_right.find(str_i); /*find beginning of coordinates*/
+  found_f_r = file_content_right.find(str_f); /*find ending of coordinates*/
+
+  found_i_l = file_content_left.find(str_i); /*find beginning of coordinates*/
+  found_f_l = file_content_left.find(str_f); /*find ending of coordinates*/
 
   // std::cout << found_i << " " << found_f << std::endl;
-  handle_kml.close(); /*close handle*/
-
-  std::string strf =
-      file_content.substr(found_i + 18, found_f - found_i - 19); /*cut string to contemplate only the coordinates*/
-  // std::cout << strf << std::endl;
+  handle_kml_right.close(); /*close handle*/
+  handle_kml_left.close();
+  /*cut string to contemplate only the coordinates*/
+  std::string strr = file_content_right.substr(found_i_r + 18, found_f_r - found_i_r - 19);
+  std::string strl = file_content_left.substr(found_i_l + 18, found_f_l - found_i_l - 19);
   /*separate in coordinates points*/
-  std::stringstream ss(strf);
-  while (ss.good())
+  std::stringstream ss_r(strr);
+  while (ss_r.good())
   {
     string substr;
-    std::getline(ss, substr, ' ');
-    // substr.erase(std::remove_if(substr.begin(), substr.end(), std::isspace), substr.end());
-    coordinates.push_back(substr);
+    std::getline(ss_r, substr, ' ');
+    coordinates_right.push_back(substr);
+  }
+  std::stringstream ss_l(strl);
+  while (ss_l.good())
+  {
+    string substr;
+    std::getline(ss_l, substr, ' ');
+    coordinates_left.push_back(substr);
   }
 
   /*separate in latitude and longitude*/
   int ncoord = 1;
-  for (auto const &point : coordinates)
+  for (auto const &point : coordinates_right)
   {
     // std::cout << point << std::endl;
     int count = 1;
@@ -205,10 +216,27 @@ void QuantEval::ReadKml()
       string string;
       std::getline(sss, string, ',');
       // std::cout << string << " and " << count << std::endl;
-      if (count == 1 && !string.empty() && ncoord < coordinates.size())
-        lon_vec.push_back(stof(string));
-      if (count == 2 && !string.empty() && ncoord < coordinates.size())
-        lat_vec.push_back(stof(string));
+      if (count == 1 && !string.empty() && ncoord < coordinates_right.size())
+        lon_right.push_back(stof(string));
+      if (count == 2 && !string.empty() && ncoord < coordinates_right.size())
+        lat_right.push_back(stof(string));
+      count++;
+    }
+    ncoord++;
+  }
+  ncoord = 1;
+  for (auto const &point : coordinates_left)
+  {
+    int count = 1;
+    std::stringstream sss(point);
+    while (sss.good())
+    {
+      string string;
+      std::getline(sss, string, ',');
+      if (count == 1 && !string.empty() && ncoord < coordinates_left.size())
+        lon_left.push_back(stof(string));
+      if (count == 2 && !string.empty() && ncoord < coordinates_left.size())
+        lat_left.push_back(stof(string));
       count++;
     }
     ncoord++;
@@ -217,48 +245,44 @@ void QuantEval::ReadKml()
 
 void QuantEval::DistanceToCar()
 {
-  for (int i = 0; i < coordinates.size(); i++)
-  {
-    lat_lim = 0.000025495 * (lat_vec[i] - lat) / 6.73 - 2.925;
-    lon_lim = 0.00002549 * (lon_vec[i] - lon) / 6.73;
-    lat_meters.push_back(lat_lim);
-    // distance between moving_axis and ground has to be subtracted
-    lon_meters.push_back(lon_lim);
-  }
-}
+  N = nc * nl;
+  gt_points.clear();
+  gt_points.resize(N);
+  gt_points.assign(gt_points.size(), 0);
 
-void QuantEval::GtkLaunch()
-{
-  builderG = gtk_builder_new();
-  ret = gtk_builder_add_from_file(builderG, gladeFile, NULL);
-
-  if (!ret)
+  GTGrid.info = info;
+  GTGrid.header = header;
+  // limite direito da estrada
+  for (int i = 0; i < coordinates_right.size(); i++)
   {
-    std::cout << gladeFile << " file was not found. Aborting!" << std::endl;
+    dx = DistFrom(car_lat, lon_right[i]) - 2.925;  // distance between moving_axis and ground has to be subtracted
+    dy = DistFrom(lat_right[i], car_lon);
+    lat_dx_meters.push_back(dx);
+    lon_dy_meters.push_back(dy);
   }
 
-  std::cout << "here" << std::endl;
+  for (int i = 0; i < coordinates_left.size(); i++)
+  {
+    dx = DistFrom(car_lat, lon_left[i]) - 2.925;  // distance between moving_axis and ground has to be subtracted
+    dy = -1 * DistFrom(lat_left[i], car_lon);
+    lat_dx_meters.push_back(dx);
+    lon_dy_meters.push_back(dy);
 
-  gtk_builder_connect_signals(builderG, NULL);
+    std::cout << "dx: " << dx << "; dy: " << dy << std::endl;
+  }
 
-  GtkWidget *win = GTK_WIDGET(gtk_builder_get_object(builderG, "window1"));
+  for (int i = 0; i < lat_dx_meters.size(); i++)
+  {
+    if (lat_dx_meters[i] <= 40 && lat_dx_meters[i] >= 0 && lon_dy_meters[i] >= -20 && lon_dy_meters[i] <= 20)
+    {
+      lin = (int)floor(lat_dx_meters[i] / pace);
+      col = (int)floor(lon_dy_meters[i] / pace) + 20 / pace;
 
-  GtkButton *back_button = GTK_BUTTON(gtk_builder_get_object(builderG, "back_button"));
-  GtkButton *next_button = GTK_BUTTON(gtk_builder_get_object(builderG, "next_button"));
-  GtkButton *ok_button = GTK_BUTTON(gtk_builder_get_object(builderG, "ok_button"));
+      gt_points[lin + col * nl] = 100;
+    }
+  }
 
-  GtkSpinButton *distance_spin = GTK_SPIN_BUTTON(gtk_builder_get_object(builderG, "distance_spin"));
-  GtkSpinButton *resolution_spin = GTK_SPIN_BUTTON(gtk_builder_get_object(builderG, "resolution_spin"));
-
-  GtkComboBoxText *filter_combo = GTK_COMBO_BOX_TEXT(gtk_builder_get_object(builderG, "filter_combo"));
-
-  GtkDrawingArea *drawingarea = GTK_DRAWING_AREA(gtk_builder_get_object(builderG, "map_image"));
-  GtkImage *filter_image = GTK_IMAGE(gtk_builder_get_object(builderG, "filter_image"));
-  GtkImage *camera_image = GTK_IMAGE(gtk_builder_get_object(builderG, "camera_image"));
-
-  g_signal_connect(G_OBJECT(back_button), "clicked", G_CALLBACK(BackCallback), this);
-  g_signal_connect(G_OBJECT(next_button), "clicked", G_CALLBACK(NextCallback), this);
-  g_signal_connect(G_OBJECT(ok_button), "clicked", G_CALLBACK(FinishCallback), this);
+  GTGrid.data = gt_points;
 }
 
 /**
@@ -271,12 +295,9 @@ void QuantEval::GtkLaunch()
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "QuantEval");
-  gtk_init(&argc, &argv);
   QuantEval reconstruct;
   reconstruct.StartHandle();
   reconstruct.ReadKml();
-  // reconstruct.GtkLaunch();
-  // gtk_main();
 
   ros::Rate rate(50);
   while (ros::ok())
@@ -294,7 +315,7 @@ int main(int argc, char **argv)
 std::string QuantEval::FormatPlacemark(float lat1, float lon1)
 {
   std::ostringstream ss;
-  if (lon < -7 && lon > -9 && lat > 39 && lat < 41)
+  if (car_lon < -7 && car_lon > -9 && car_lat > 39 && car_lat < 41)
     handle << " " << std::setprecision(20) << lon1 << "," << lat1 << ",0";
   return ss.str();
 }
@@ -306,4 +327,23 @@ void QuantEval::CloseHandle()
   handle << "</Placemark>\n";
   handle << "</kml>\n";
   handle.close();
+}
+
+float QuantEval::DistFrom(float lat1, float lon1)
+{
+  float earthRadius = 6371000;  // meters
+  float dLat = ToRadians(car_lat - lat1);
+  float dLon = ToRadians(car_lon - lon1);
+  float a =
+      sin(dLat / 2) * sin(dLat / 2) + cos(ToRadians(lat1)) * cos(ToRadians(car_lat)) * sin(dLon / 2) * sin(dLon / 2);
+  float c = 2 * atan2(sqrt(a), sqrt(1 - a));
+  float dist = earthRadius * c;
+
+  return dist;
+}
+
+float QuantEval::ToRadians(float degrees)
+{
+  float radians = degrees * M_PI / 180;
+  return radians;
 }

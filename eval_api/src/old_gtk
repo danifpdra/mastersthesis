@@ -1,0 +1,122 @@
+
+class QuantEval
+{
+public:
+  QuantEval();
+  void LoopFunction();
+  void GtkLaunch();
+  void CloseHandle();
+  void StartHandle();
+  void ReadKml();
+
+private:
+  ros::NodeHandle nh;
+
+  // void FinishCallback(GtkWidget *windows, gpointer data);
+  // void NextCallback(GtkWidget *windows, gpointer data);
+  // void BackCallback(GtkWidget *windows, gpointer data);
+
+  static void FinishCallback(GtkWidget *windows, gpointer *data)
+  {
+    gtk_main_quit();
+    // main::quit();
+    // cv::imwrite("~/catkin_ws/src/mastersthesis/eval_api/Results/image_XXX.jpg", gray_image);
+  }
+
+  static void NextCallback(GtkWidget *windows, gpointer *data)
+  {
+  }
+
+  static void BackCallback(GtkWidget *windows, gpointer *data)
+  {
+  }
+
+  float car_lat, car_lon, dx, dy, pace;
+  GtkBuilder *builderG;
+  char *gladeFile = (char *)"/home/daniela/catkin_ws/src/mastersthesis/eval_api/src/eval_api.glade";
+  int ret;
+  int lin, col, nl, nc, N;
+
+  std::ofstream handle;
+  std::ifstream handle_kml_right, handle_kml_left;
+  ros::Subscriber velocity_sub, grid_sub;
+  ros::Publisher gps_pub, gt_pub;
+  gps_common::GPSFix gps_msg;
+  // to read kml
+  std::string file_content_right, file_content_left;
+  std::string str_i, str_f;
+  std::size_t found_i_r, found_f_r, found_i_l, found_f_l;
+  std::stringstream strStream_r, strStream_l;
+  std::vector<string> coordinates_right, coordinates_left;
+  std::vector<float> lat_right, lat_left, lon_right, lon_left, lat_dx_meters, lon_dy_meters;
+  std::vector<int8_t> gt_points;
+
+  std_msgs::Header header;
+  nav_msgs::MapMetaData info;
+  nav_msgs::OccupancyGrid GTGrid;
+
+  void getVelocity(const novatel_gps_msgs::InspvaPtr &velMsg);
+  void getGrid(const nav_msgs::OccupancyGrid &msgGrid);
+  std::string FormatPlacemark(float lat1, float lon1);
+  void DistanceToCar();
+  float DistFrom(float lat1, float lon1);
+  float ToRadians(float degrees);
+}; 
+
+
+void QuantEval::GtkLaunch()
+{
+  builderG = gtk_builder_new();
+  ret = gtk_builder_add_from_file(builderG, gladeFile, NULL);
+
+  if (!ret)
+  {
+    std::cout << gladeFile << " file was not found. Aborting!" << std::endl;
+  }
+
+  std::cout << "here" << std::endl;
+
+  gtk_builder_connect_signals(builderG, NULL);
+
+  GtkWidget *win = GTK_WIDGET(gtk_builder_get_object(builderG, "window1"));
+
+  GtkButton *back_button = GTK_BUTTON(gtk_builder_get_object(builderG, "back_button"));
+  GtkButton *next_button = GTK_BUTTON(gtk_builder_get_object(builderG, "next_button"));
+  GtkButton *ok_button = GTK_BUTTON(gtk_builder_get_object(builderG, "ok_button"));
+
+  GtkSpinButton *distance_spin = GTK_SPIN_BUTTON(gtk_builder_get_object(builderG, "distance_spin"));
+  GtkSpinButton *resolution_spin = GTK_SPIN_BUTTON(gtk_builder_get_object(builderG, "resolution_spin"));
+
+  GtkComboBoxText *filter_combo = GTK_COMBO_BOX_TEXT(gtk_builder_get_object(builderG, "filter_combo"));
+
+  GtkDrawingArea *drawingarea = GTK_DRAWING_AREA(gtk_builder_get_object(builderG, "map_image"));
+  GtkImage *filter_image = GTK_IMAGE(gtk_builder_get_object(builderG, "filter_image"));
+  GtkImage *camera_image = GTK_IMAGE(gtk_builder_get_object(builderG, "camera_image"));
+
+  g_signal_connect(G_OBJECT(back_button), "clicked", G_CALLBACK(BackCallback), this);
+  g_signal_connect(G_OBJECT(next_button), "clicked", G_CALLBACK(NextCallback), this);
+  g_signal_connect(G_OBJECT(ok_button), "clicked", G_CALLBACK(FinishCallback), this);
+}
+
+int main(int argc, char **argv)
+{
+  ros::init(argc, argv, "QuantEval");
+  gtk_init(&argc, &argv);
+  QuantEval reconstruct;
+  reconstruct.StartHandle();
+  reconstruct.ReadKml();
+  // reconstruct.GtkLaunch();
+  // gtk_main();
+
+  ros::Rate rate(50);
+  while (ros::ok())
+  {
+    reconstruct.LoopFunction();
+    ros::spinOnce();
+    rate.sleep();
+  }
+
+  reconstruct.CloseHandle();
+
+  return 0;
+}
