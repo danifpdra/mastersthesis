@@ -18,17 +18,19 @@ find_package(catkin REQUIRED COMPONENTS
   tf
   laser_geometry
   sensor_msgs
-  OpenCV 
+  # OpenCV 
   cv_bridge
   image_transport
   grid_map_ros
   grid_map_cv
+  swri_math_util
 )
 find_package(cmake_modules)
 find_package(Eigen REQUIRED)
-find_package(PkgConfig REQUIRED)
+# find_package(OpenCV REQUIRED OpenCv 3.2.0)
+# find_package(PkgConfig REQUIRED)
 
-PKG_CHECK_MODULES(GTK REQUIRED gtk+-3.0)
+# PKG_CHECK_MODULES(GTK REQUIRED gtk+-3.0)
 
 
 ## System dependencies are found with CMake's conventions
@@ -126,7 +128,7 @@ catkin_package(
   INCLUDE_DIRS include
   #LIBRARIES negative_obstacles
   # CATKIN_DEPENDS roscpp rospy std_msgs
-  DEPENDS Eigen kmlconvenience
+  DEPENDS Eigen #kmlconvenience
 )
 
 ###########
@@ -138,7 +140,7 @@ catkin_package(
 include_directories(
   ${catkin_INCLUDE_DIRS}
   ${Eigen_INCLUDE_DIRS}
-  ${GTK_INCLUDE_DIRS}
+  # ${GTK_INCLUDE_DIRS}
   include
 )
 
@@ -159,8 +161,8 @@ add_executable(${PROG} src/eval_api.cpp)
 link_directories(${PCL_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS})
 
-link_directories(${GTK_LIBRARY_DIRS})
-add_definitions(${GTK_CFLAGS_OTHER})
+# link_directories(${GTK_LIBRARY_DIRS})
+# add_definitions(${GTK_CFLAGS_OTHER})
 
 
 # link_directories(${LIB_DIRS} -losmgpsmap-1.0)
@@ -188,20 +190,12 @@ add_definitions(${GTK_CFLAGS_OTHER})
    ${catkin_LIBRARIES}
    ${Eigen_LIBRARIES}
    ${OpenCV_LIBS}
-   ${GTK_LIBRARIES}
+  #  ${GTK_LIBRARIES}
   #  libosmgpsmap-1.0-1
   #  osmgpsmap-1.0
 )
 
 
-# --- add custom mtargets (and dependencies)
-add_custom_target( cpfiles
-                COMMAND cp "${PROJECT_SOURCE_DIR}/src/*.glade" "${PROJECT_BINARY_DIR}"
-                COMMAND cp "${PROJECT_SOURCE_DIR}/src/*.png" "${PROJECT_BINARY_DIR}" || :
-                 )
-
-#Add dependencies
-add_dependencies(${PROG} cpfiles)
 #############
 ## Install ##
 #############

@@ -47,21 +47,20 @@
   <build_depend>tf</build_depend>
   <build_depend>sensor_msgs</build_depend>
   <build_depend>dynamic_reconfigure</build_depend>
-  <build_depend>OpenCV</build_depend>
+  <!-- <build_depend>OpenCV</build_depend> -->
   <build_depend>cv_bridge</build_depend>
   <build_depend>grid_map_ros</build_depend>
-  <build_depend>PkgConfig</build_depend>
+
 
   <build_export_depend>grid_map_ros</build_export_depend>
   <build_export_depend>cv_bridge</build_export_depend>
-  <build_export_depend>OpenCV</build_export_depend>
+  <!-- <build_export_depend>OpenCV</build_export_depend> -->
   <build_export_depend>roscpp</build_export_depend>
   <build_export_depend>rospy</build_export_depend>
   <build_export_depend>std_msgs</build_export_depend>
   <build_export_depend>laser_geometry</build_export_depend>
   <build_export_depend>tf</build_export_depend>
   <build_export_depend>sensor_msgs</build_export_depend>
-  <build_export_depend>PkgConfig</build_export_depend>
 
   <exec_depend>roscpp</exec_depend>
   <exec_depend>rospy</exec_depend>
@@ -70,10 +69,10 @@
   <exec_depend>tf</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>dynamic_reconfigure</exec_depend>
-  <exec_depend>OpenCV</exec_depend>
+  <!-- <exec_depend>OpenCV</exec_depend> -->
   <exec_depend>cv_bridge</exec_depend>
   <exec_depend>grid_map_ros</exec_depend>
-  <exec_depend>PkgConfig</exec_depend>
+
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>

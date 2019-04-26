@@ -1,12 +1,9 @@
-
-#include <tf/transform_listener.h>
-
-#include <rosbag/bag.h>
-#include <rosbag/view.h>
-#include <std_msgs/Int32.h>
-#include <std_msgs/String.h>
-
+#include <swri_math_util/constants.h>
+#include <swri_math_util/trig_util.h>
 #include <boost/foreach.hpp>
+/*Point cloud*/
+#include <ros/ros.h>
+
 /*math*/
 #include <math.h>
 #include <stdio.h>
@@ -28,28 +25,13 @@
 #include "std_msgs/Header.h"
 /* openCv*/
 #include <cv_bridge/cv_bridge.h>
-#include <image_transport/image_transport.h>
+#include <Eigen/Core>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/opencv.hpp>
 #include "opencv2/imgproc/imgproc.hpp"
 
-#include <cairo/cairo.h>
-// #include <gtkmm.h>
-#include <gdk/gdk.h>
-#include <gtk/gtk.h>
-
-#include <gdk/gdkkeysyms.h>
-#include <glib.h>
-// #include "osmgpsmap-1.0/osm-gps-map.h"
-
-#include <unistd.h>                      //Sleep
-#include <eval_api/GoogleEarthPath.hpp>  //This class
-
-// #include "kml/base/file.h"
-// #include "kml/base/string_util.h"
-// #include "kml/base/zip_file.h"
-// #include "kml/dom.h"
+#include <unistd.h>  //Sleep
 
 using namespace std;
 
@@ -65,14 +47,15 @@ public:
 private:
   ros::NodeHandle nh;
 
-  float car_lat, car_lon, dx, dy, pace;
+  float car_lat, car_lon, dx_r, dx_l, dy_r, dy_l, pace, dx_rot_r, dx_rot_l, dy_rot_r, dy_rot_l;
   int lin, col, nl, nc, N;
+  double yaw, yaw_1;
 
   std::ofstream handle;
   std::ifstream handle_kml_right, handle_kml_left;
   ros::Subscriber velocity_sub, grid_sub;
   ros::Publisher gps_pub, gt_pub;
-  gps_common::GPSFix gps_msg;
+
   // to read kml
   std::string file_content_right, file_content_left;
   std::string str_i, str_f;
@@ -85,6 +68,10 @@ private:
   std_msgs::Header header;
   nav_msgs::MapMetaData info;
   nav_msgs::OccupancyGrid GTGrid;
+  gps_common::GPSFix gps_msg;
+
+  Eigen::Matrix2d rotationMatrix;
+  Eigen::Vector2d crd_r, crd_l, crd_rot_r, crd_rot_l;
 
   void getVelocity(const novatel_gps_msgs::InspvaPtr &velMsg);
   void getGrid(const nav_msgs::OccupancyGrid &msgGrid);
@@ -131,8 +118,12 @@ void QuantEval::StartHandle()
 
 void QuantEval::getVelocity(const novatel_gps_msgs::InspvaPtr &velMsg)
 {
-  car_lat = velMsg->latitude;
-  car_lon = velMsg->longitude;
+  car_lat = gps_msg.latitude = velMsg->latitude;
+  car_lon = gps_msg.longitude = velMsg->longitude;
+
+  yaw = (90.0 - velMsg->azimuth) * swri_math_util::_deg_2_rad;
+  yaw_1 = swri_math_util::WrapRadians(yaw, swri_math_util::_pi);
+  rotationMatrix << cos(yaw_1), sin(yaw_1), -sin(yaw_1), cos(yaw_1);
 }
 
 void QuantEval::getGrid(const nav_msgs::OccupancyGrid &msgGrid)
@@ -147,22 +138,20 @@ void QuantEval::getGrid(const nav_msgs::OccupancyGrid &msgGrid)
 
 void QuantEval::LoopFunction()
 {
-  gps_msg.latitude = car_lat;
-  gps_msg.longitude = car_lon;
-
   // std::cout << "latitude: " << std::setprecision(20) << lat << "; longitude: " << lon << std::endl;
   if (car_lon < -7 && car_lon > -9 && car_lat > 39 && car_lat < 41)
+  {
     gps_pub.publish(gps_msg);
-  handle << FormatPlacemark(car_lat, car_lon);
-
-  DistanceToCar();
-  gt_pub.publish(GTGrid);
+    handle << FormatPlacemark(car_lat, car_lon);
+    DistanceToCar();
+    gt_pub.publish(GTGrid);
+  }
 }
 
 void QuantEval::ReadKml()
 {
-  handle_kml_right.open("/home/daniela/RightPath.kml");
-  handle_kml_left.open("/home/daniela/LeftPath.kml");
+  handle_kml_right.open("/home/daniela/catkin_ws/src/mastersthesis/Kml_files/RightPath.kml");
+  handle_kml_left.open("/home/daniela/catkin_ws/src/mastersthesis/Kml_files/LeftPath.kml");
 
   if (!handle_kml_right.is_open() || !handle_kml_left.is_open())
     std::cout << "could not open file" << std::endl;
@@ -253,22 +242,30 @@ void QuantEval::DistanceToCar()
   GTGrid.info = info;
   GTGrid.header = header;
   // limite direito da estrada
-  for (int i = 0; i < coordinates_right.size(); i++)
+  for (int i = 0; i < coordinates_right.size() - 1; i++)
   {
-    dx = DistFrom(car_lat, lon_right[i]) - 2.925;  // distance between moving_axis and ground has to be subtracted
-    dy = DistFrom(lat_right[i], car_lon);
-    lat_dx_meters.push_back(dx);
-    lon_dy_meters.push_back(dy);
+    dx_r = DistFrom(car_lat, lon_right[i]) - 2.925;  // distance between moving_axis and ground has to be subtracted
+    dy_r = DistFrom(lat_right[i], car_lon);
+    crd_r << dx_r, dy_r;
+    crd_rot_r = rotationMatrix * crd_r;
+    dx_rot_r = crd_rot_r(0);
+    dy_rot_r = crd_rot_r(1);
+    lat_dx_meters.push_back(dx_rot_r);
+    lon_dy_meters.push_back(dy_rot_r);
   }
 
-  for (int i = 0; i < coordinates_left.size(); i++)
+  for (int i = 0; i < coordinates_left.size() - 1; i++)
   {
-    dx = DistFrom(car_lat, lon_left[i]) - 2.925;  // distance between moving_axis and ground has to be subtracted
-    dy = -1 * DistFrom(lat_left[i], car_lon);
-    lat_dx_meters.push_back(dx);
-    lon_dy_meters.push_back(dy);
+    dx_l = DistFrom(car_lat, lon_left[i]) - 2.925;  // distance between moving_axis and ground has to be subtracted
+    dy_l = -1 * DistFrom(lat_left[i], car_lon);
+    crd_l << dx_l, dy_l;
+    crd_rot_l = rotationMatrix * crd_l;
+    dx_rot_l = crd_rot_l(0);
+    dy_rot_l = crd_rot_l(1);
+    lat_dx_meters.push_back(dx_rot_l);
+    lon_dy_meters.push_back(dy_rot_l);
 
-    std::cout << "dx: " << dx << "; dy: " << dy << std::endl;
+    std::cout << "dx: " << dx_rot_l << "; dy: " << dy_rot_l << std::endl;
   }
 
   for (int i = 0; i < lat_dx_meters.size(); i++)
@@ -337,7 +334,7 @@ float QuantEval::DistFrom(float lat1, float lon1)
   float a =
       sin(dLat / 2) * sin(dLat / 2) + cos(ToRadians(lat1)) * cos(ToRadians(car_lat)) * sin(dLon / 2) * sin(dLon / 2);
   float c = 2 * atan2(sqrt(a), sqrt(1 - a));
-  float dist = earthRadius * c;
+  float dist = abs(earthRadius * c);
 
   return dist;
 }
