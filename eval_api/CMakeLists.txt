@@ -125,7 +125,7 @@ find_package(Eigen REQUIRED)
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-  INCLUDE_DIRS include
+  # INCLUDE_DIRS include
   #LIBRARIES negative_obstacles
   # CATKIN_DEPENDS roscpp rospy std_msgs
   DEPENDS Eigen #kmlconvenience
@@ -141,7 +141,7 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
   ${Eigen_INCLUDE_DIRS}
   # ${GTK_INCLUDE_DIRS}
-  include
+  # include
 )
 
 ## Declare a C++ library

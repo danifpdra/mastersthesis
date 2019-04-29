@@ -31,7 +31,7 @@
 #include <opencv2/opencv.hpp>
 #include "opencv2/imgproc/imgproc.hpp"
 
-#include <unistd.h>  //Sleep
+#include <unistd.h> //Sleep
 
 using namespace std;
 
@@ -47,7 +47,7 @@ public:
 private:
   ros::NodeHandle nh;
 
-  float car_lat, car_lon, dx_r, dx_l, dy_r, dy_l, pace, dx_rot_r, dx_rot_l, dy_rot_r, dy_rot_l;
+  double car_lat, car_lon, dx_r, dx_l, dy_r, dy_l, pace, dx_rot_r, dx_rot_l, dy_rot_r, dy_rot_l;
   int lin, col, nl, nc, N;
   double yaw, yaw_1;
 
@@ -62,7 +62,7 @@ private:
   std::size_t found_i_r, found_f_r, found_i_l, found_f_l;
   std::stringstream strStream_r, strStream_l;
   std::vector<string> coordinates_right, coordinates_left;
-  std::vector<float> lat_right, lat_left, lon_right, lon_left, lat_dx_meters, lon_dy_meters;
+  std::vector<double> lat_right, lat_left, lon_right, lon_left, lat_dx_meters, lon_dy_meters;
   std::vector<int8_t> gt_points;
 
   std_msgs::Header header;
@@ -75,13 +75,13 @@ private:
 
   void getVelocity(const novatel_gps_msgs::InspvaPtr &velMsg);
   void getGrid(const nav_msgs::OccupancyGrid &msgGrid);
-  std::string FormatPlacemark(float lat1, float lon1);
+  std::string FormatPlacemark(double lat1, double lon1);
   void DistanceToCar();
-  float DistFrom(float lat1, float lon1);
-  float ToRadians(float degrees);
+  double DistFrom(double lat1, double lon1);
+  double ToRadians(double degrees);
 };
 
-QuantEval::QuantEval() : str_i({ "<coordinates>" }), str_f({ "</coordinates>" })
+QuantEval::QuantEval() : str_i({"<coordinates>"}), str_f({"</coordinates>"})
 {
   velocity_sub = nh.subscribe("inspva", 10, &QuantEval::getVelocity, this);
   grid_sub = nh.subscribe("density_pub", 10, &QuantEval::getGrid, this);
@@ -122,7 +122,9 @@ void QuantEval::getVelocity(const novatel_gps_msgs::InspvaPtr &velMsg)
   car_lon = gps_msg.longitude = velMsg->longitude;
 
   yaw = (90.0 - velMsg->azimuth) * swri_math_util::_deg_2_rad;
+
   yaw_1 = swri_math_util::WrapRadians(yaw, swri_math_util::_pi);
+  std::cout << yaw_1 << std::endl;
   rotationMatrix << cos(yaw_1), sin(yaw_1), -sin(yaw_1), cos(yaw_1);
 }
 
@@ -139,7 +141,7 @@ void QuantEval::getGrid(const nav_msgs::OccupancyGrid &msgGrid)
 void QuantEval::LoopFunction()
 {
   // std::cout << "latitude: " << std::setprecision(20) << lat << "; longitude: " << lon << std::endl;
-  if (car_lon < -7 && car_lon > -9 && car_lat > 39 && car_lat < 41)
+  if (car_lon < -7 && car_lon > -9 && car_lat > 39 && car_lat < 41 && pace > 0.1)
   {
     gps_pub.publish(gps_msg);
     handle << FormatPlacemark(car_lat, car_lon);
@@ -158,10 +160,10 @@ void QuantEval::ReadKml()
   else
   {
     std::cout << "opened files" << std::endl;
-    strStream_r << handle_kml_right.rdbuf();  // read the file
+    strStream_r << handle_kml_right.rdbuf(); // read the file
     file_content_right = strStream_r.str();
 
-    strStream_l << handle_kml_left.rdbuf();  // read the file
+    strStream_l << handle_kml_left.rdbuf(); // read the file
     file_content_left = strStream_l.str();
   }
 
@@ -194,26 +196,24 @@ void QuantEval::ReadKml()
   }
 
   /*separate in latitude and longitude*/
-  int ncoord = 1;
+  int n_coord = 1;
   for (auto const &point : coordinates_right)
   {
-    // std::cout << point << std::endl;
     int count = 1;
     std::stringstream sss(point);
     while (sss.good())
     {
       string string;
       std::getline(sss, string, ',');
-      // std::cout << string << " and " << count << std::endl;
-      if (count == 1 && !string.empty() && ncoord < coordinates_right.size())
+      if (count == 1 && !string.empty() && n_coord < coordinates_right.size())
         lon_right.push_back(stof(string));
-      if (count == 2 && !string.empty() && ncoord < coordinates_right.size())
+      if (count == 2 && !string.empty() && n_coord < coordinates_right.size())
         lat_right.push_back(stof(string));
       count++;
     }
-    ncoord++;
+    n_coord++;
   }
-  ncoord = 1;
+  n_coord = 1;
   for (auto const &point : coordinates_left)
   {
     int count = 1;
@@ -222,13 +222,13 @@ void QuantEval::ReadKml()
     {
       string string;
       std::getline(sss, string, ',');
-      if (count == 1 && !string.empty() && ncoord < coordinates_left.size())
+      if (count == 1 && !string.empty() && n_coord < coordinates_left.size())
         lon_left.push_back(stof(string));
-      if (count == 2 && !string.empty() && ncoord < coordinates_left.size())
+      if (count == 2 && !string.empty() && n_coord < coordinates_left.size())
         lat_left.push_back(stof(string));
       count++;
     }
-    ncoord++;
+    n_coord++;
   }
 }
 
@@ -244,7 +244,7 @@ void QuantEval::DistanceToCar()
   // limite direito da estrada
   for (int i = 0; i < coordinates_right.size() - 1; i++)
   {
-    dx_r = DistFrom(car_lat, lon_right[i]) - 2.925;  // distance between moving_axis and ground has to be subtracted
+    dx_r = DistFrom(car_lat, lon_right[i]) - 2.925; // distance between moving_axis and ground has to be subtracted
     dy_r = DistFrom(lat_right[i], car_lon);
     crd_r << dx_r, dy_r;
     crd_rot_r = rotationMatrix * crd_r;
@@ -256,7 +256,7 @@ void QuantEval::DistanceToCar()
 
   for (int i = 0; i < coordinates_left.size() - 1; i++)
   {
-    dx_l = DistFrom(car_lat, lon_left[i]) - 2.925;  // distance between moving_axis and ground has to be subtracted
+    dx_l = DistFrom(car_lat, lon_left[i]) - 2.925; // distance between moving_axis and ground has to be subtracted
     dy_l = -1 * DistFrom(lat_left[i], car_lon);
     crd_l << dx_l, dy_l;
     crd_rot_l = rotationMatrix * crd_l;
@@ -267,15 +267,28 @@ void QuantEval::DistanceToCar()
 
     std::cout << "dx: " << dx_rot_l << "; dy: " << dy_rot_l << std::endl;
   }
-
+  std::cout << "size of x: " << lat_dx_meters.size() << "; size of y: " << lon_dy_meters.size() << std::endl;
   for (int i = 0; i < lat_dx_meters.size(); i++)
   {
-    if (lat_dx_meters[i] <= 40 && lat_dx_meters[i] >= 0 && lon_dy_meters[i] >= -20 && lon_dy_meters[i] <= 20)
+    std::cout << "inside cycle" << std::endl;
+    if (lat_dx_meters[i] <= (double)40 && lat_dx_meters[i] >= (double)0 && lon_dy_meters[i] >= (double)-20 && lon_dy_meters[i] <= (double)20)
     {
+      std::cout << "inside cycle for" << std::endl;
       lin = (int)floor(lat_dx_meters[i] / pace);
       col = (int)floor(lon_dy_meters[i] / pace) + 20 / pace;
 
-      gt_points[lin + col * nl] = 100;
+      std::cout << "calculated lines and col and the pace is " << pace << std::endl;
+
+      if (lin + col * nl < N && lin < nl && col < nc)
+      {
+
+        std::cout << "the index of the vector is " << lin + col * nl << std::endl;
+        std::cout << "lines: " << lin << "; col: " << col << std::endl;
+
+        gt_points[lin + col * nl] = 100;
+
+        std::cout << "acessed points in occupancy grid " << std::endl;
+      }
     }
   }
 
@@ -309,7 +322,7 @@ int main(int argc, char **argv)
   return 0;
 }
 
-std::string QuantEval::FormatPlacemark(float lat1, float lon1)
+std::string QuantEval::FormatPlacemark(double lat1, double lon1)
 {
   std::ostringstream ss;
   if (car_lon < -7 && car_lon > -9 && car_lat > 39 && car_lat < 41)
@@ -326,21 +339,21 @@ void QuantEval::CloseHandle()
   handle.close();
 }
 
-float QuantEval::DistFrom(float lat1, float lon1)
+double QuantEval::DistFrom(double lat1, double lon1)
 {
-  float earthRadius = 6371000;  // meters
-  float dLat = ToRadians(car_lat - lat1);
-  float dLon = ToRadians(car_lon - lon1);
-  float a =
+  double earthRadius = 6371000; // meters
+  double dLat = ToRadians(car_lat - lat1);
+  double dLon = ToRadians(car_lon - lon1);
+  double a =
       sin(dLat / 2) * sin(dLat / 2) + cos(ToRadians(lat1)) * cos(ToRadians(car_lat)) * sin(dLon / 2) * sin(dLon / 2);
-  float c = 2 * atan2(sqrt(a), sqrt(1 - a));
-  float dist = abs(earthRadius * c);
+  double c = 2 * atan2(sqrt(a), sqrt(1 - a));
+  double dist = abs(earthRadius * c);
 
   return dist;
 }
 
-float QuantEval::ToRadians(float degrees)
+double QuantEval::ToRadians(double degrees)
 {
-  float radians = degrees * M_PI / 180;
+  double radians = degrees * M_PI / 180;
   return radians;
 }
