@@ -31,7 +31,7 @@
 #include <opencv2/opencv.hpp>
 #include "opencv2/imgproc/imgproc.hpp"
 
-#include <unistd.h> //Sleep
+#include <unistd.h>  //Sleep
 
 using namespace std;
 
@@ -79,9 +79,10 @@ private:
   void DistanceToCar();
   double DistFrom(double lat1, double lon1);
   double ToRadians(double degrees);
+  double interpolate(vector<double> &xData, vector<double> &yData, double x, bool extrapolate);
 };
 
-QuantEval::QuantEval() : str_i({"<coordinates>"}), str_f({"</coordinates>"})
+QuantEval::QuantEval() : str_i({ "<coordinates>" }), str_f({ "</coordinates>" })
 {
   velocity_sub = nh.subscribe("inspva", 10, &QuantEval::getVelocity, this);
   grid_sub = nh.subscribe("density_pub", 10, &QuantEval::getGrid, this);
@@ -121,7 +122,8 @@ void QuantEval::getVelocity(const novatel_gps_msgs::InspvaPtr &velMsg)
   car_lat = gps_msg.latitude = velMsg->latitude;
   car_lon = gps_msg.longitude = velMsg->longitude;
 
-  yaw = (90.0 - velMsg->azimuth) * swri_math_util::_deg_2_rad;
+  // yaw = (90.0 - velMsg->azimuth) * swri_math_util::_deg_2_rad;
+  yaw = (0 - velMsg->azimuth) * swri_math_util::_deg_2_rad;
 
   yaw_1 = swri_math_util::WrapRadians(yaw, swri_math_util::_pi);
   std::cout << yaw_1 << std::endl;
@@ -145,6 +147,8 @@ void QuantEval::LoopFunction()
   {
     gps_pub.publish(gps_msg);
     handle << FormatPlacemark(car_lat, car_lon);
+    gt_points.clear();
+    gt_points.resize(N);
     DistanceToCar();
     gt_pub.publish(GTGrid);
   }
@@ -160,10 +164,10 @@ void QuantEval::ReadKml()
   else
   {
     std::cout << "opened files" << std::endl;
-    strStream_r << handle_kml_right.rdbuf(); // read the file
+    strStream_r << handle_kml_right.rdbuf();  // read the file
     file_content_right = strStream_r.str();
 
-    strStream_l << handle_kml_left.rdbuf(); // read the file
+    strStream_l << handle_kml_left.rdbuf();  // read the file
     file_content_left = strStream_l.str();
   }
 
@@ -237,18 +241,20 @@ void QuantEval::DistanceToCar()
   N = nc * nl;
   gt_points.clear();
   gt_points.resize(N);
-  gt_points.assign(gt_points.size(), 0);
+  lat_dx_meters.clear();
+  lon_dy_meters.clear();
+  // gt_points.assign(gt_points.size(), 0);
 
   GTGrid.info = info;
   GTGrid.header = header;
   // limite direito da estrada
   for (int i = 0; i < coordinates_right.size() - 1; i++)
   {
-    dx_r = DistFrom(car_lat, lon_right[i]) - 2.925; // distance between moving_axis and ground has to be subtracted
+    dx_r = DistFrom(car_lat, lon_right[i]) - 2.925;  // distance between moving_axis and ground has to be subtracted
     dy_r = DistFrom(lat_right[i], car_lon);
     crd_r << dx_r, dy_r;
     crd_rot_r = rotationMatrix * crd_r;
-    dx_rot_r = crd_rot_r(0);
+    dx_rot_r = crd_rot_r(0) - 2.925;
     dy_rot_r = crd_rot_r(1);
     lat_dx_meters.push_back(dx_rot_r);
     lon_dy_meters.push_back(dy_rot_r);
@@ -256,32 +262,64 @@ void QuantEval::DistanceToCar()
 
   for (int i = 0; i < coordinates_left.size() - 1; i++)
   {
-    dx_l = DistFrom(car_lat, lon_left[i]) - 2.925; // distance between moving_axis and ground has to be subtracted
+    dx_l = DistFrom(car_lat, lon_left[i]);  // distance between moving_axis and ground has to be subtracted
     dy_l = -1 * DistFrom(lat_left[i], car_lon);
     crd_l << dx_l, dy_l;
     crd_rot_l = rotationMatrix * crd_l;
-    dx_rot_l = crd_rot_l(0);
+    dx_rot_l = crd_rot_l(0) - 2.925;
     dy_rot_l = crd_rot_l(1);
     lat_dx_meters.push_back(dx_rot_l);
     lon_dy_meters.push_back(dy_rot_l);
 
     std::cout << "dx: " << dx_rot_l << "; dy: " << dy_rot_l << std::endl;
   }
-  std::cout << "size of x: " << lat_dx_meters.size() << "; size of y: " << lon_dy_meters.size() << std::endl;
+  // interpolate
+  for (int i = 0; i < coordinates_left.size() + coordinates_right.size(); i++)
+  {
+    if (std::abs(lon_dy_meters[i + 1] - lon_dy_meters[i]) <
+        0.1 * std::max(std::abs(lon_dy_meters[i + 1]), std::abs(lon_dy_meters[i])))
+    {
+      ROS_WARN("true and the nr of points is: %d", (int)floor((lat_dx_meters[i + 1] - lat_dx_meters[i]) / pace));
+      for (int n = 1; n < (int)floor((lat_dx_meters[i + 1] - lat_dx_meters[i]) / pace); n++)
+      {
+        if (lon_dy_meters[i] < 0 && lon_dy_meters[i + 1] < 0)
+        {
+          std::vector<double> xData = { lat_dx_meters[i], lat_dx_meters[i + 1] };
+          std::vector<double> yData = { lon_dy_meters[i], lon_dy_meters[i + 1] };
+          double x = lat_dx_meters[i] + pace * n;
+          double y = interpolate(xData, yData, x, true);
+          lat_dx_meters.push_back(x);
+          lon_dy_meters.push_back(y);
+        }
+        else if (lon_dy_meters[i] > 0 && lon_dy_meters[i + 1] > 0)
+        {
+          std::vector<double> xData = { lat_dx_meters[i], lat_dx_meters[i + 1] };
+          std::vector<double> yData = { lon_dy_meters[i], lon_dy_meters[i + 1] };
+          int x = lat_dx_meters[i] + pace * n;
+          int y = interpolate(xData, yData, x, true);
+          lat_dx_meters.push_back(x);
+          lon_dy_meters.push_back(y);
+        }
+      }
+    }
+  }
+
   for (int i = 0; i < lat_dx_meters.size(); i++)
   {
-    std::cout << "inside cycle" << std::endl;
-    if (lat_dx_meters[i] <= (double)40 && lat_dx_meters[i] >= (double)0 && lon_dy_meters[i] >= (double)-20 && lon_dy_meters[i] <= (double)20)
+    // std::cout << "inside cycle" << std::endl;
+    if (lat_dx_meters[i] <= (double)40 && lat_dx_meters[i] >= (double)0 && lon_dy_meters[i] >= (double)-20 &&
+        lon_dy_meters[i] <= (double)20)
     {
-      std::cout << "inside cycle for" << std::endl;
+      // std::cout << "inside cycle for" << std::endl;
       lin = (int)floor(lat_dx_meters[i] / pace);
       col = (int)floor(lon_dy_meters[i] / pace) + 20 / pace;
 
-      std::cout << "calculated lines and col and the pace is " << pace << std::endl;
+      std::cout << "size of x: " << lat_dx_meters.size() << "; size of y: " << lon_dy_meters.size()
+                << ". The size of the cycle should be: " << coordinates_left.size() + coordinates_right.size()
+                << std::endl;
 
       if (lin + col * nl < N && lin < nl && col < nc)
       {
-
         std::cout << "the index of the vector is " << lin + col * nl << std::endl;
         std::cout << "lines: " << lin << "; col: " << col << std::endl;
 
@@ -291,7 +329,7 @@ void QuantEval::DistanceToCar()
       }
     }
   }
-
+  GTGrid.data.clear();
   GTGrid.data = gt_points;
 }
 
@@ -341,7 +379,7 @@ void QuantEval::CloseHandle()
 
 double QuantEval::DistFrom(double lat1, double lon1)
 {
-  double earthRadius = 6371000; // meters
+  double earthRadius = 6371000;  // meters
   double dLat = ToRadians(car_lat - lat1);
   double dLon = ToRadians(car_lon - lon1);
   double a =
@@ -356,4 +394,33 @@ double QuantEval::ToRadians(double degrees)
 {
   double radians = degrees * M_PI / 180;
   return radians;
+}
+
+double QuantEval::interpolate(vector<double> &xData, vector<double> &yData, double x, bool extrapolate)
+{
+  int size = xData.size();
+
+  int i = 0;                 // find left end of interval for interpolation
+  if (x >= xData[size - 2])  // special case: beyond right end
+  {
+    i = size - 2;
+  }
+  else
+  {
+    while (x > xData[i + 1])
+      i++;
+  }
+  double xL = xData[i], yL = yData[i], xR = xData[i + 1],
+         yR = yData[i + 1];  // points on either side (unless beyond ends)
+  if (!extrapolate)          // if beyond ends of array and not extrapolating
+  {
+    if (x < xL)
+      yR = yL;
+    if (x > xR)
+      yL = yR;
+  }
+
+  double dydx = (yR - yL) / (xR - xL);  // gradient
+
+  return yL + dydx * (x - xL);  // linear interpolation
 }
