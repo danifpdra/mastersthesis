@@ -177,7 +177,6 @@ void QuantEval::ReadKml()
   found_i_l = file_content_left.find(str_i); /*find beginning of coordinates*/
   found_f_l = file_content_left.find(str_f); /*find ending of coordinates*/
 
-  // std::cout << found_i << " " << found_f << std::endl;
   handle_kml_right.close(); /*close handle*/
   handle_kml_left.close();
   /*cut string to contemplate only the coordinates*/
@@ -250,7 +249,7 @@ void QuantEval::DistanceToCar()
   // limite direito da estrada
   for (int i = 0; i < coordinates_right.size() - 1; i++)
   {
-    dx_r = DistFrom(car_lat, lon_right[i]) - 2.925;  // distance between moving_axis and ground has to be subtracted
+    dx_r = DistFrom(car_lat, lon_right[i]);  // distance between moving_axis and ground has to be subtracted
     dy_r = DistFrom(lat_right[i], car_lon);
     crd_r << dx_r, dy_r;
     crd_rot_r = rotationMatrix * crd_r;
@@ -270,8 +269,6 @@ void QuantEval::DistanceToCar()
     dy_rot_l = crd_rot_l(1);
     lat_dx_meters.push_back(dx_rot_l);
     lon_dy_meters.push_back(dy_rot_l);
-
-    std::cout << "dx: " << dx_rot_l << "; dy: " << dy_rot_l << std::endl;
   }
   // interpolate
   for (int i = 0; i < coordinates_left.size() + coordinates_right.size(); i++)
@@ -287,7 +284,7 @@ void QuantEval::DistanceToCar()
           std::vector<double> xData = { lat_dx_meters[i], lat_dx_meters[i + 1] };
           std::vector<double> yData = { lon_dy_meters[i], lon_dy_meters[i + 1] };
           double x = lat_dx_meters[i] + pace * n;
-          double y = interpolate(xData, yData, x, true);
+          double y = interpolate(xData, yData, x, false);
           lat_dx_meters.push_back(x);
           lon_dy_meters.push_back(y);
         }
@@ -296,7 +293,7 @@ void QuantEval::DistanceToCar()
           std::vector<double> xData = { lat_dx_meters[i], lat_dx_meters[i + 1] };
           std::vector<double> yData = { lon_dy_meters[i], lon_dy_meters[i + 1] };
           int x = lat_dx_meters[i] + pace * n;
-          int y = interpolate(xData, yData, x, true);
+          int y = interpolate(xData, yData, x, false);
           lat_dx_meters.push_back(x);
           lon_dy_meters.push_back(y);
         }

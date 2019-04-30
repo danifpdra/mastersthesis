@@ -2,7 +2,7 @@
 <kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
 <Document>
 	<name>LeftPath.kml</name>
-	<Style id="sh_ylw-pushpin">
+	<Style id="s_ylw-pushpin_hl">
 		<IconStyle>
 			<scale>1.3</scale>
 			<Icon>
@@ -10,22 +10,18 @@
 			</Icon>
 			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
 		</IconStyle>
-		<LineStyle>
-			<color>ff0000ff</color>
-			<width>2.5</width>
-		</LineStyle>
 	</Style>
-	<StyleMap id="msn_ylw-pushpin">
+	<StyleMap id="m_ylw-pushpin">
 		<Pair>
 			<key>normal</key>
-			<styleUrl>#sn_ylw-pushpin</styleUrl>
+			<styleUrl>#s_ylw-pushpin</styleUrl>
 		</Pair>
 		<Pair>
 			<key>highlight</key>
-			<styleUrl>#sh_ylw-pushpin</styleUrl>
+			<styleUrl>#s_ylw-pushpin_hl</styleUrl>
 		</Pair>
 	</StyleMap>
-	<Style id="sn_ylw-pushpin">
+	<Style id="s_ylw-pushpin">
 		<IconStyle>
 			<scale>1.1</scale>
 			<Icon>
@@ -33,18 +29,14 @@
 			</Icon>
 			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
 		</IconStyle>
-		<LineStyle>
-			<color>ff0000ff</color>
-			<width>2.5</width>
-		</LineStyle>
 	</Style>
 	<Placemark>
 		<name>LeftPath</name>
-		<styleUrl>#msn_ylw-pushpin</styleUrl>
+		<styleUrl>#m_ylw-pushpin</styleUrl>
 		<LineString>
 			<tessellate>1</tessellate>
 			<coordinates>
-				-8.658328232972249,40.6294293120329,0 -8.658424466831608,40.62950196751729,0 -8.658544849371285,40.6295898344101,0 -8.658722623741111,40.62972214630881,0 -8.658842281204858,40.6298116707172,0 -8.658908533652117,40.62986207125837,0 -8.658975823144795,40.62990492788553,0 -8.659018259548176,40.62993832815461,0 -8.659099248802908,40.63000077405064,0 
+				-8.658337259127551,40.62943446836154,0 -8.658379103862737,40.62946624454171,0 -8.658418468586538,40.62949677548496,0 -8.658460048046733,40.62952895329162,0 -8.658497132592467,40.62955311069535,0 -8.658517773435722,40.62957043056133,0 -8.658550008295853,40.62959418438446,0 -8.658585793084265,40.62962005951091,0 -8.658625217453555,40.62964995041634,0 -8.658667965637498,40.62968150154349,0 -8.658712315619145,40.62971512088558,0 -8.658756224925725,40.62974605380832,0 -8.658807410879231,40.62978477243857,0 -8.65884763984443,40.62981596357157,0 -8.658912101298014,40.62986228381654,0 -8.658952939485767,40.62989411038406,0 -8.658980797097303,40.62991511942359,0 -8.659025260114513,40.62994681128593,0 -8.659048352547668,40.62996326111616,0 -8.659073525974291,40.62998354652995,0 -8.659103195570342,40.63000852836326,0 
 			</coordinates>
 		</LineString>
 	</Placemark>
