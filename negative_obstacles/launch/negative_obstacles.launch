@@ -11,7 +11,7 @@
     <!--Launch the visualization-->
     <node pkg="rviz" type="rviz" name="rviz" args="--display-config $(find negative_obstacles)/config/rviz.rviz" required="false"/>
 
-    <node pkg="mapviz" type="mapviz" name="mapviz" args="--display-config $(find negative_obstacles)/config/mapviz.mapviz" required="false"/>
+    
 
     <!-- Launch the node   -->
     <node pkg="free_space_detection" type="device_frame_publisher_node" name="device_frame_publisher" required="true" output="screen"/>
