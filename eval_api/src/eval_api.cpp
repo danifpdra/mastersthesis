@@ -317,26 +317,26 @@ void QuantEval::DistanceToCar()
   GTGrid.data = gt_points;
 }
 
-void QuantEval::createCSV()
-{
-  handle_csv.exceptions(std::ofstream::failbit | std::ofstream::badbit);
+// void QuantEval::createCSV()
+// {
+//   handle_csv.exceptions(std::ofstream::failbit | std::ofstream::badbit);
 
-  char filename[100];
+//   char filename[100];
 
-  time_t theTime = time(NULL);
-  struct tm *aTime = localtime(&theTime);
+//   time_t theTime = time(NULL);
+//   struct tm *aTime = localtime(&theTime);
 
-  int hour = aTime->tm_hour;
-  int min = aTime->tm_min;
+//   int hour = aTime->tm_hour;
+//   int min = aTime->tm_min;
 
-  sprintf(filename, "/home/daniela/catkin_ws/src/mastersthesis/eval_api/Results/CSV/Measures%dH_%dM.csv", hour, min);
-  // Open the KML file for writing:
-  handle.open(filename);
-  if (!handle_csv.is_open())
-    handle_csv.open();
-  handle_csv << "PPV,TNR,NPV,TPR\n";
-  else handle_csv.close();
-}
+//   sprintf(filename, "/home/daniela/catkin_ws/src/mastersthesis/eval_api/Results/CSV/Measures%dH_%dM.csv", hour, min);
+//   // Open the KML file for writing:
+//   handle.open(filename);
+//   if (!handle_csv.is_open())
+//     handle_csv.open();
+//   handle_csv << "PPV,TNR,NPV,TPR\n";
+//   else handle_csv.close();
+// }
 
 void QuantEval::StatisticMeasures()
 {

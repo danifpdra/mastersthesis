@@ -57,7 +57,7 @@
     <!-- Launch the node   -->
     <node pkg="road_reconstruction" type="road_reconstruction" name="road_reconstruction" required="true" output="screen"/>
     <!-- Launch the node   -->
-    <node pkg="negative_obstacles" type="negative_obstacles" name="negative_obstacles" required="true" output="screen"/>
+    <!-- <node pkg="negative_obstacles" type="negative_obstacles" name="negative_obstacles" required="true" output="screen"/> -->
     <!-- Launch the node   -->
     <!-- <node pkg="road_reconstruction" type="assem" name="assem" required="true" output="screen"/> -->
 
