@@ -317,7 +317,7 @@ int Threshold(double G, double lim)
 {
   int level;
   if (G > lim)
-    level = G;
+    level = 100;
   else
     level = 0;
 

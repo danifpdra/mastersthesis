@@ -191,29 +191,29 @@ void NegObstc::ImageConversion()
 
   msg_canny = cv_bridge::CvImage{ header, "mono8", canny_img }.toImageMsg();
   grid_map::GridMapRosConverter::initializeFromImage(*msg_canny, pace, cannyGridMap);
-  grid_map::GridMapRosConverter::addLayerFromImage(*msg_canny, "canny", cannyGridMap, 0, 255, 255);
+  grid_map::GridMapRosConverter::addLayerFromImage(*msg_canny, "canny", cannyGridMap, 0, 255, 0.5);
   grid_map::GridMapRosConverter::toOccupancyGrid(cannyGridMap, "canny", 150, 255, cannyGrid);
   cannyGrid.info = info;
 
   msg_laplace = cv_bridge::CvImage{ header, "mono8", laplace_img }.toImageMsg();
   grid_map::GridMapRosConverter::initializeFromImage(*msg_laplace, pace, laplaceGridMap);
-  grid_map::GridMapRosConverter::addLayerFromImage(*msg_laplace, "laplacian", laplaceGridMap, 0, 255, 255);
+  grid_map::GridMapRosConverter::addLayerFromImage(*msg_laplace, "laplacian", laplaceGridMap, 0, 255, 0.7);
   grid_map::GridMapRosConverter::toOccupancyGrid(laplaceGridMap, "laplacian", 175, 255, laplaceGrid);
   laplaceGrid.info = info;
 
   msg_sobel = cv_bridge::CvImage{ header, "mono8", sobel_img }.toImageMsg();
   grid_map::GridMapRosConverter::initializeFromImage(*msg_sobel, pace, sobelGridMap);
-  grid_map::GridMapRosConverter::addLayerFromImage(*msg_sobel, "sobel", sobelGridMap, 0, 255, 125);
+  grid_map::GridMapRosConverter::addLayerFromImage(*msg_sobel, "sobel", sobelGridMap, 0, 255, 0.7);
   grid_map::GridMapRosConverter::toOccupancyGrid(sobelGridMap, "sobel", 130, 255, sobelGrid);
 
   msg_sobelX = cv_bridge::CvImage{ header, "mono8", sobel_grad_x }.toImageMsg();
   grid_map::GridMapRosConverter::initializeFromImage(*msg_sobelX, pace, sobelGxGridMap);
-  grid_map::GridMapRosConverter::addLayerFromImage(*msg_sobelX, "sobelX", sobelGxGridMap, 0, 255, 125);
+  grid_map::GridMapRosConverter::addLayerFromImage(*msg_sobelX, "sobelX", sobelGxGridMap, 0, 255, 0.7);
   grid_map::GridMapRosConverter::toOccupancyGrid(sobelGxGridMap, "sobelX", 150, 255, sobelGxGrid);
 
   msg_sobelY = cv_bridge::CvImage{ header, "mono8", sobel_grad_y }.toImageMsg();
   grid_map::GridMapRosConverter::initializeFromImage(*msg_sobelY, pace, sobelGyGridMap);
-  grid_map::GridMapRosConverter::addLayerFromImage(*msg_sobelY, "sobelY", sobelGyGridMap, 0, 255, 125);
+  grid_map::GridMapRosConverter::addLayerFromImage(*msg_sobelY, "sobelY", sobelGyGridMap, 0, 255, 0.7);
   grid_map::GridMapRosConverter::toOccupancyGrid(sobelGyGridMap, "sobelY", 150, 255, sobelGyGrid);
   sobelGrid.info = sobelGxGrid.info = sobelGyGrid.info = info;
 }
@@ -228,8 +228,10 @@ void NegObstc::EdgeDetection()
 
   grid_map::GridMapRosConverter::fromOccupancyGrid(densityGrid, "density", temporalGridMap);
   grid_map::GridMapCvConverter::toImage<unsigned char, 1>(temporalGridMap, "density", CV_8UC1, temporal_image);
+
   /* Create a matrix of the same type and size as src (for canny_img edge detection)*/
   canny_img.create(temporal_image.size(), temporal_image.type());
+
   /* Reduce noise with a kernel 3x3*/
   // cv::blur(temporal_image, blur_img, cv::Size(3, 3));
   cv::threshold(temporal_image, blur_img, 170, 255, cv::THRESH_OTSU);
@@ -237,22 +239,26 @@ void NegObstc::EdgeDetection()
   temporal_image.at<uchar>(y, x) = 0;
   if (nz < N / 2)
     cv::threshold(blur_img, blur_img, 150, 255, cv::THRESH_BINARY_INV);
+
   /* Canny detector*/
   cv::Canny(temporal_image, detected_edges, 200, 255, 3);
   canny_img = cv::Scalar::all(0);
   temporal_image.copyTo(canny_img, detected_edges);
+
   /* Laplacian detector */
   cv::Laplacian(temporal_image, laplace_img, CV_16S, kernel_size, 1, 0, cv::BORDER_DEFAULT);
   convertScaleAbs(laplace_img, laplace_img);
-  // cv::fastNlMeansDenoising(laplace_img, laplace_img, 3, 7, 21);
+
   /* Sobel - Gradient X */
   // Scharr( src_gray, grad_x, ddepth, 1, 0, scale, delta, BORDER_DEFAULT );
   cv::Sobel(temporal_image, sobel_grad_x, CV_16S, 1, 0, kernel_size, 1, 0, cv::BORDER_DEFAULT);
   convertScaleAbs(sobel_grad_x, sobel_grad_x);
+
   /* Sobel - Gradient Y*/
   // Scharr( src_gray, grad_y, ddepth, 0, 1, scale, delta, BORDER_DEFAULT );
   cv::Sobel(temporal_image, sobel_grad_y, CV_16S, 0, 1, kernel_size, 1, 0, cv::BORDER_DEFAULT);
   cv::convertScaleAbs(sobel_grad_y, sobel_grad_y);
+
   /* Total Gradient (approximate) */
   cv::addWeighted(sobel_grad_x, 0.5, sobel_grad_y, 0.5, 0, sobel_img);
 }
@@ -376,15 +382,15 @@ void NegObstc::GradientCalculation()
 
         kirsh_grad[ls][cs].kirsh = abs(kirsh_grad[ls][cs].gx) / 5 + abs(kirsh_grad[ls][cs].gy) / 5;
 
-        prewitt_points[s] = Threshold(prewitt_grad[ls][cs].prewitt / (3 * max) * 100, 50);
-        kirsh_points[s] = Threshold(kirsh_grad[ls][cs].kirsh, 50);
+        prewitt_points[s] = Threshold(prewitt_grad[ls][cs].prewitt / (3 * max) * 100, 70);
+        kirsh_points[s] = Threshold(kirsh_grad[ls][cs].kirsh, 70);
 
         s++;
       }
 
-      grad_points[j] = Threshold(grad[l][c].grad_tot, 50);
-      grad_x_points[j] = Threshold(abs(grad[l][c].vertical), 50);
-      grad_y_points[j] = Threshold(abs(grad[l][c].horizontal), 50);
+      grad_points[j] = Threshold(grad[l][c].grad_tot, 70);
+      grad_x_points[j] = Threshold(abs(grad[l][c].vertical), 70);
+      grad_y_points[j] = Threshold(abs(grad[l][c].horizontal), 70);
 
       j++;
     }

@@ -28,6 +28,7 @@
 /* openCv*/
 #include <cv_bridge/cv_bridge.h>
 #include <Eigen/Core>
+#include <Eigen/Dense>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/opencv.hpp>
@@ -46,33 +47,37 @@ public:
   void StartHandle();
   std::vector<string> ReadKml(string path);
   void ConvertToCoordinates();
+  void CreateCSV();
 
 private:
+  // declaration of global variables
   ros::NodeHandle nh;
 
   double car_lat, car_lon, dx_r, dx_l, dy_r, dy_l, pace;
   int lin, col, nl, nc, N;
   double yaw, yaw_1;
+  int n_vezes = 0;
 
   std::string str_i, str_f;
   std::ofstream handle, handle_csv;
-  ros::Subscriber velocity_sub, grid_sub;
-  ros::Publisher gps_pub, gt_pub;
+  ros::Subscriber velocity_sub, grid_sub, laplacian_sub;
+  ros::Publisher gps_pub, gt_pub, cleangrid_pub;
 
   // to read kml
   std::vector<string> coordinates_right, coordinates_left;
   std::vector<double> lat_right, lat_left, lon_right, lon_left, gt_dx_meters, gt_dy_meters;
-  std::vector<int8_t> gt_points;
+  std::vector<int8_t> gt_points, points_to_clean, cleaned_edges;
 
   std_msgs::Header header;
   nav_msgs::MapMetaData info;
-  nav_msgs::OccupancyGrid GTGrid;
+  nav_msgs::OccupancyGrid GTGrid, EdgeGrid;
   gps_common::GPSFix gps_msg;
   geometry_msgs::Point Coord;
 
   Eigen::Matrix2d rotationMatrix;
   Eigen::Vector2d crd_r, crd_l, crd_r_correct, crd_l_correct;
   Eigen::Vector2d carUTM;
+  Eigen::MatrixXd matToClean, matCleaned;
 
   // statistical measurements
   int nr_nz, nr_zero;
@@ -80,47 +85,30 @@ private:
   double PPV, TNR, NPV, TPR;
 
   void getVelocity(const novatel_gps_msgs::InspvaPtr &velMsg);
-  void getGrid(const nav_msgs::OccupancyGrid &msgGrid);
+  void getDensityGrid(const nav_msgs::OccupancyGrid &msgGrid);
+  void getEdgeGrid(const nav_msgs::OccupancyGrid &msgGrid);
   std::string FormatPlacemark(double lat1, double lon1);
   void DistanceToCar();
   double interpolate(vector<double> &xData, vector<double> &yData, double x, bool extrapolate);
   void StatisticMeasures();
+  void CleanLimits();
 };
 
+/**********************************************************/
+/**********************CONSTRUCTOR*************************/
 QuantEval::QuantEval() : str_i({"<coordinates>"}), str_f({"</coordinates>"})
 {
   velocity_sub = nh.subscribe("inspva", 10, &QuantEval::getVelocity, this);
-  grid_sub = nh.subscribe("density_pub", 10, &QuantEval::getGrid, this);
+  grid_sub = nh.subscribe("density_pub", 10, &QuantEval::getDensityGrid, this);
+  laplacian_sub = nh.subscribe("laplacian_pub", 10, &QuantEval::getEdgeGrid, this);
 
   gps_pub = nh.advertise<gps_common::GPSFix>("gps_pub", 1, true);
   gt_pub = nh.advertise<nav_msgs::OccupancyGrid>("gt_pub", 1, true);
+  cleangrid_pub = nh.advertise<nav_msgs::OccupancyGrid>("cleangrid_pub", 1, true);
 }
 
-void QuantEval::StartHandle()
-{
-  handle.exceptions(std::ofstream::failbit | std::ofstream::badbit);
-
-  char filename[100];
-
-  time_t theTime = time(NULL);
-  struct tm *aTime = localtime(&theTime);
-
-  int hour = aTime->tm_hour;
-  int min = aTime->tm_min;
-
-  sprintf(filename, "/home/daniela/catkin_ws/src/mastersthesis/eval_api/Results/Path_%dH_%dM.kml", hour, min);
-  // Open the KML file for writing:
-  handle.open(filename);
-  // Write to the KML file:
-  handle << "<?xml version='1.0' encoding='utf-8'?>\n";
-  handle << "<kml xmlns='http://www.opengis.net/kml/2.2'>\n";
-  handle << "<Placemark>\n";
-  handle << "<description>Path to evaluate road limits' precision</description>\n";
-  handle << "<styleUrl>#pathstyle</styleUrl>\n";
-  handle << "<LineString>\n";
-  handle << "<tessellate>1</tessellate>\n";
-  handle << "<coordinates>";
-}
+/********************************************************/
+/**********************CALLBACKS*************************/
 
 void QuantEval::getVelocity(const novatel_gps_msgs::InspvaPtr &velMsg)
 {
@@ -137,7 +125,7 @@ void QuantEval::getVelocity(const novatel_gps_msgs::InspvaPtr &velMsg)
   rotationMatrix << cos(yaw_1), -sin(yaw_1), sin(yaw_1), cos(yaw_1);
 }
 
-void QuantEval::getGrid(const nav_msgs::OccupancyGrid &msgGrid)
+void QuantEval::getDensityGrid(const nav_msgs::OccupancyGrid &msgGrid)
 {
   info = msgGrid.info;
   header = msgGrid.header;
@@ -147,6 +135,31 @@ void QuantEval::getGrid(const nav_msgs::OccupancyGrid &msgGrid)
   pace = msgGrid.info.resolution;
 }
 
+void QuantEval::getEdgeGrid(const nav_msgs::OccupancyGrid &msgGrid)
+{
+  nc = msgGrid.info.height;
+  nl = msgGrid.info.width;
+  matToClean.resize(nc, nl);
+  // EdgeGrid = msgGrid;
+  points_to_clean.resize(N);
+  points_to_clean = msgGrid.data;
+  std::cout << "size of msg is " << msgGrid.data.size();
+
+  for (int idx = 0; idx < nc * nl; idx++)
+  {
+    int c = (int)(idx / nl);
+    int l = idx - (c * nl);
+
+    matToClean(l, c) = points_to_clean[idx];
+  }
+
+  std::cout << matToClean << std::endl;
+}
+
+/********************************************************/
+
+/************************************************************/
+/**********************LOOP FUNCTION*************************/
 void QuantEval::LoopFunction()
 {
   // std::cout << "latitude: " << std::setprecision(20) << lat << "; longitude: " << lon << std::endl;
@@ -156,6 +169,9 @@ void QuantEval::LoopFunction()
     handle << FormatPlacemark(car_lat, car_lon);
     DistanceToCar();
     gt_pub.publish(GTGrid);
+
+    CleanLimits();
+    cleangrid_pub.publish(EdgeGrid);
   }
 }
 
@@ -200,7 +216,7 @@ std::vector<string> QuantEval::ReadKml(string path)
 
 void QuantEval::ConvertToCoordinates()
 {
-  coordinates_right = ReadKml("/home/daniela/catkin_ws/src/mastersthesis/Kml_files/RightPath.kml");
+  coordinates_right = ReadKml("/home/daniela/catkin_ws/src/road_detection/Kml_files/RightPath.kml");
   /*separate in latitude and longitude*/
   int n_coord = 1;
   for (auto const &point : coordinates_right)
@@ -220,7 +236,7 @@ void QuantEval::ConvertToCoordinates()
     n_coord++;
   }
 
-  coordinates_left = ReadKml("/home/daniela/catkin_ws/src/mastersthesis/Kml_files/LeftPath.kml");
+  coordinates_left = ReadKml("/home/daniela/catkin_ws/src/road_detection/Kml_files/LeftPath.kml");
   n_coord = 1;
   for (auto const &point : coordinates_left)
   {
@@ -243,8 +259,10 @@ void QuantEval::ConvertToCoordinates()
 void QuantEval::DistanceToCar()
 {
   N = nc * nl;
+
   gt_points.clear();
   gt_points.resize(N);
+
   gt_dx_meters.clear();
   gt_dy_meters.clear();
 
@@ -317,32 +335,55 @@ void QuantEval::DistanceToCar()
   GTGrid.data = gt_points;
 }
 
-// void QuantEval::createCSV()
-// {
-//   handle_csv.exceptions(std::ofstream::failbit | std::ofstream::badbit);
+/**
+ * @brief Function to only consider the first right and left limit to the car
+ * 
+ */
+void QuantEval::CleanLimits()
+{
+  cleaned_edges.clear();
+  cleaned_edges.resize(N);
 
-//   char filename[100];
+  for (int i = 0; i < nl; i++)
+  {
+    int stop = 0;
+    int idx = nc / 2;
+    while (stop == 0 && idx < nc)
+    {
+      if (matToClean(i, idx) != 0)
+      {
+        // matCleaned(i, idx) = 100;
+        cleaned_edges[i + idx * nl] = 100;
+        stop = 1;
+      }
+      idx++;
+    }
+    stop = 0;
+    idx = nc / 2;
+    while (stop == 0 && idx > 0)
+    {
+      if (matToClean(i, idx) != 0)
+      {
+        // matCleaned(i, idx) = 100;
+        cleaned_edges[i + idx * nl] = 100;
+        stop = 1;
+      }
+      idx--;
+    }
+  }
 
-//   time_t theTime = time(NULL);
-//   struct tm *aTime = localtime(&theTime);
+  EdgeGrid.info = info;
+  EdgeGrid.header = header;
 
-//   int hour = aTime->tm_hour;
-//   int min = aTime->tm_min;
-
-//   sprintf(filename, "/home/daniela/catkin_ws/src/mastersthesis/eval_api/Results/CSV/Measures%dH_%dM.csv", hour, min);
-//   // Open the KML file for writing:
-//   handle.open(filename);
-//   if (!handle_csv.is_open())
-//     handle_csv.open();
-//   handle_csv << "PPV,TNR,NPV,TPR\n";
-//   else handle_csv.close();
-// }
+  // matCleaned.transposeInPlace();
+  // cleaned_edges = Eigen::Map<std::vector<int>>(matCleaned.data(), matCleaned.cols() * matCleaned.rows());
+  EdgeGrid.data = cleaned_edges;
+}
 
 void QuantEval::StatisticMeasures()
 {
-
   if (handle_csv.is_open())
-    handle_csv << PPV << "," << TNR << "," << NPV << "," << TPR << "/n";
+    handle_csv << PPV << "," << TNR << "," << NPV << "," << TPR << "\n";
 }
 
 /**
@@ -358,6 +399,7 @@ int main(int argc, char **argv)
   QuantEval reconstruct;
   reconstruct.StartHandle();
   reconstruct.ConvertToCoordinates();
+  reconstruct.CreateCSV();
 
   ros::Rate rate(50);
   while (ros::ok())
@@ -370,6 +412,49 @@ int main(int argc, char **argv)
   reconstruct.CloseHandle();
 
   return 0;
+}
+
+void QuantEval::CreateCSV()
+{
+  handle_csv.exceptions(std::ofstream::failbit | std::ofstream::badbit);
+
+  char filename[100];
+
+  time_t theTime = time(NULL);
+  struct tm *aTime = localtime(&theTime);
+  int hour = aTime->tm_hour;
+  int min = aTime->tm_min;
+
+  sprintf(filename, "/home/daniela/catkin_ws/src/road_detection/eval_api/Results/CSV/Measures%dH_%dM.csv", hour, min);
+  // Open the KML file for writing:
+  handle_csv.open(filename);
+  handle_csv << "PPV,TNR,NPV,TPR\n";
+}
+
+void QuantEval::StartHandle()
+{
+  handle.exceptions(std::ofstream::failbit | std::ofstream::badbit);
+
+  char filename[100];
+
+  time_t theTime = time(NULL);
+  struct tm *aTime = localtime(&theTime);
+
+  int hour = aTime->tm_hour;
+  int min = aTime->tm_min;
+
+  sprintf(filename, "/home/daniela/catkin_ws/src/road_detection/eval_api/Results/Path_%dH_%dM.kml", hour, min);
+  // Open the KML file for writing:
+  handle.open(filename);
+  // Write to the KML file:
+  handle << "<?xml version='1.0' encoding='utf-8'?>\n";
+  handle << "<kml xmlns='http://www.opengis.net/kml/2.2'>\n";
+  handle << "<Placemark>\n";
+  handle << "<description>Path to evaluate road limits' precision</description>\n";
+  handle << "<styleUrl>#pathstyle</styleUrl>\n";
+  handle << "<LineString>\n";
+  handle << "<tessellate>1</tessellate>\n";
+  handle << "<coordinates>";
 }
 
 std::string QuantEval::FormatPlacemark(double lat1, double lon1)
@@ -387,6 +472,7 @@ void QuantEval::CloseHandle()
   handle << "</Placemark>\n";
   handle << "</kml>\n";
   handle.close();
+  handle_csv.close();
 }
 
 double QuantEval::interpolate(vector<double> &xData, vector<double> &yData, double x, bool extrapolate)
