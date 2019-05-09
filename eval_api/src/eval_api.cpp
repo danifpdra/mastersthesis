@@ -57,6 +57,7 @@ private:
   int lin, col, nl, nc, N;
   double yaw, yaw_1;
   int n_vezes = 0;
+  bool gt_coincident = false;
 
   std::string str_i, str_f;
   std::ofstream handle, handle_csv;
@@ -66,7 +67,7 @@ private:
   // to read kml
   std::vector<string> coordinates_right, coordinates_left;
   std::vector<double> lat_right, lat_left, lon_right, lon_left, gt_dx_meters, gt_dy_meters;
-  std::vector<int8_t> gt_points, points_to_clean, cleaned_edges;
+  std::vector<int8_t> gt_points, cleaned_edges;
 
   std_msgs::Header header;
   nav_msgs::MapMetaData info;
@@ -77,12 +78,7 @@ private:
   Eigen::Matrix2d rotationMatrix;
   Eigen::Vector2d crd_r, crd_l, crd_r_correct, crd_l_correct;
   Eigen::Vector2d carUTM;
-  Eigen::MatrixXd matToClean, matCleaned;
-
-  // statistical measurements
-  int nr_nz, nr_zero;
-  int TP, FP, TN, FN;
-  double PPV, TNR, NPV, TPR;
+  Eigen::MatrixXd matToClean;
 
   void getVelocity(const novatel_gps_msgs::InspvaPtr &velMsg);
   void getDensityGrid(const nav_msgs::OccupancyGrid &msgGrid);
@@ -137,26 +133,20 @@ void QuantEval::getDensityGrid(const nav_msgs::OccupancyGrid &msgGrid)
 
 void QuantEval::getEdgeGrid(const nav_msgs::OccupancyGrid &msgGrid)
 {
+  std::vector<int8_t> points_to_clean;
   nc = msgGrid.info.height;
   nl = msgGrid.info.width;
   matToClean.resize(nc, nl);
-  // EdgeGrid = msgGrid;
   points_to_clean.resize(N);
   points_to_clean = msgGrid.data;
-  std::cout << "size of msg is " << msgGrid.data.size();
-
   for (int idx = 0; idx < nc * nl; idx++)
   {
     int c = (int)(idx / nl);
     int l = idx - (c * nl);
-
     matToClean(l, c) = points_to_clean[idx];
   }
-
-  std::cout << matToClean << std::endl;
 }
-
-/********************************************************/
+/************************************************************/
 
 /************************************************************/
 /**********************LOOP FUNCTION*************************/
@@ -172,8 +162,11 @@ void QuantEval::LoopFunction()
 
     CleanLimits();
     cleangrid_pub.publish(EdgeGrid);
+
+    StatisticMeasures();
   }
 }
+/************************************************************/
 
 std::vector<string> QuantEval::ReadKml(string path)
 {
@@ -293,7 +286,7 @@ void QuantEval::DistanceToCar()
   // interpolate
   for (int i = 0; i < coordinates_left.size() + coordinates_right.size(); i++)
   {
-    std::cout << "Dx: " << gt_dx_meters[i] << " and dy is: " << gt_dy_meters[i] << std::endl;
+    // std::cout << "Dx: " << gt_dx_meters[i] << " and dy is: " << gt_dy_meters[i] << std::endl;
     for (int n = 1; n < (int)floor((gt_dx_meters[i + 1] - gt_dx_meters[i]) / pace); n++)
     {
       std::vector<double> xData = {gt_dx_meters[i], gt_dx_meters[i + 1]};
@@ -307,28 +300,33 @@ void QuantEval::DistanceToCar()
 
   for (int i = 0; i < gt_dx_meters.size(); i++)
   {
+    gt_coincident = true;
     // std::cout << "inside cycle" << std::endl;
-    std::cout << "Dx: " << gt_dx_meters[i] << " and dy is: " << gt_dy_meters[i] << std::endl;
+    // std::cout << "Dx: " << gt_dx_meters[i] << " and dy is: " << gt_dy_meters[i] << std::endl;
     if (gt_dx_meters[i] <= (double)40 && gt_dx_meters[i] >= (double)0 && gt_dy_meters[i] >= (double)-20 &&
         gt_dy_meters[i] <= (double)20)
     {
-      std::cout << "inside cycle for" << std::endl;
+      // std::cout << "inside cycle for" << std::endl;
       lin = (int)floor(gt_dx_meters[i] / pace);
       col = (int)floor(gt_dy_meters[i] / pace) + 20 / pace;
 
-      std::cout << "size of x: " << gt_dx_meters.size() << "; size of y: " << gt_dy_meters.size()
-                << ". The size of the cycle should be: " << coordinates_left.size() + coordinates_right.size()
-                << std::endl;
+      // std::cout << "size of x: " << gt_dx_meters.size() << "; size of y: " << gt_dy_meters.size()
+      // << ". The size of the cycle should be: " << coordinates_left.size() + coordinates_right.size()
+      // << std::endl;
 
       if (lin + col * nl < N && lin < nl && col < nc)
       {
-        std::cout << "the index of the vector is " << lin + col * nl << std::endl;
-        std::cout << "lines: " << lin << "; col: " << col << std::endl;
+        // std::cout << "the index of the vector is " << lin + col * nl << std::endl;
+        // std::cout << "lines: " << lin << "; col: " << col << std::endl;
 
         gt_points[lin + col * nl] = 100;
 
-        std::cout << "acessed points in occupancy grid " << std::endl;
+        // std::cout << "acessed points in occupancy grid " << std::endl;
       }
+    }
+    else
+    {
+      gt_coincident = false;
     }
   }
   GTGrid.data.clear();
@@ -348,11 +346,10 @@ void QuantEval::CleanLimits()
   {
     int stop = 0;
     int idx = nc / 2;
-    while (stop == 0 && idx < nc)
+    while (stop == 0 && idx < nc && i + idx * nl < N)
     {
       if (matToClean(i, idx) != 0)
       {
-        // matCleaned(i, idx) = 100;
         cleaned_edges[i + idx * nl] = 100;
         stop = 1;
       }
@@ -360,11 +357,10 @@ void QuantEval::CleanLimits()
     }
     stop = 0;
     idx = nc / 2;
-    while (stop == 0 && idx > 0)
+    while (stop == 0 && idx > 0 && i + idx * nl < N)
     {
       if (matToClean(i, idx) != 0)
       {
-        // matCleaned(i, idx) = 100;
         cleaned_edges[i + idx * nl] = 100;
         stop = 1;
       }
@@ -374,16 +370,61 @@ void QuantEval::CleanLimits()
 
   EdgeGrid.info = info;
   EdgeGrid.header = header;
-
-  // matCleaned.transposeInPlace();
-  // cleaned_edges = Eigen::Map<std::vector<int>>(matCleaned.data(), matCleaned.cols() * matCleaned.rows());
   EdgeGrid.data = cleaned_edges;
 }
 
 void QuantEval::StatisticMeasures()
 {
-  if (handle_csv.is_open())
+
+  int TP, FP, TN, FN;
+  double PPV, TNR, NPV, TPR;
+
+  if (handle_csv.is_open() && gt_coincident == true)
+  {
+    for (int i = 0; i < gt_points.size(); i++)
+    {
+      if (gt_points[i] == cleaned_edges[i] == 0) //true negative
+      {
+        TN++;
+      }
+      else if (gt_points[i] == cleaned_edges[i] != 0) //true positive
+      {
+        TP++;
+      }
+      else if (gt_points[i] != cleaned_edges[i] && cleaned_edges[i] != 0) //false positive
+      {
+        FP++;
+      }
+      else if (gt_points[i] != cleaned_edges[i] && cleaned_edges[i] == 0) //false negative
+      {
+        FN++;
+      }
+    }
+
+    switch (TN)
+    {
+    case 0:
+      TNR = 0;
+      NPV = 0;
+      break;
+    default:
+      TNR = TN / (FP + TN);
+      NPV = TN / (TN + FN);
+    }
+
+    switch (TP)
+    {
+    case 0:
+      PPV = 0;
+      TPR = 0;
+      break;
+    default:
+      PPV = TP / (TP + FP);
+      TPR = TP / (TP + FN);
+    }
+
     handle_csv << PPV << "," << TNR << "," << NPV << "," << TPR << "\n";
+  }
 }
 
 /**
