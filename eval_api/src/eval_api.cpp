@@ -18,13 +18,13 @@
 #include <string>
 #include <vector>
 /*msgs*/
+#include <nav_msgs/Odometry.h>
 #include <novatel_gps_msgs/Inspva.h>
 #include "gps_common/GPSFix.h"
+#include "gps_common/conversions.h"
 #include "nav_msgs/MapMetaData.h"
 #include "nav_msgs/OccupancyGrid.h"
-#include <nav_msgs/Odometry.h>
 #include "std_msgs/Header.h"
-#include "gps_common/conversions.h"
 /* openCv*/
 #include <cv_bridge/cv_bridge.h>
 #include <Eigen/Core>
@@ -34,7 +34,7 @@
 #include <opencv2/opencv.hpp>
 #include "opencv2/imgproc/imgproc.hpp"
 
-#include <unistd.h> //Sleep
+#include <unistd.h>  //Sleep
 
 using namespace std;
 
@@ -47,7 +47,6 @@ public:
   void StartHandle();
   std::vector<string> ReadKml(string path);
   void ConvertToCoordinates();
-  void CreateCSV();
 
 private:
   // declaration of global variables
@@ -57,7 +56,7 @@ private:
   int lin, col, nl, nc, N;
   double yaw, yaw_1;
   int n_vezes = 0;
-  bool gt_coincident = false;
+  int gt_coincident;
 
   std::string str_i, str_f;
   std::ofstream handle, handle_csv;
@@ -68,6 +67,7 @@ private:
   std::vector<string> coordinates_right, coordinates_left;
   std::vector<double> lat_right, lat_left, lon_right, lon_left, gt_dx_meters, gt_dy_meters;
   std::vector<int8_t> gt_points, cleaned_edges;
+  std::string zone;
 
   std_msgs::Header header;
   nav_msgs::MapMetaData info;
@@ -92,7 +92,7 @@ private:
 
 /**********************************************************/
 /**********************CONSTRUCTOR*************************/
-QuantEval::QuantEval() : str_i({"<coordinates>"}), str_f({"</coordinates>"})
+QuantEval::QuantEval() : str_i({ "<coordinates>" }), str_f({ "</coordinates>" })
 {
   velocity_sub = nh.subscribe("inspva", 10, &QuantEval::getVelocity, this);
   grid_sub = nh.subscribe("density_pub", 10, &QuantEval::getDensityGrid, this);
@@ -108,24 +108,22 @@ QuantEval::QuantEval() : str_i({"<coordinates>"}), str_f({"</coordinates>"})
 
 void QuantEval::getVelocity(const novatel_gps_msgs::InspvaPtr &velMsg)
 {
+  /*get car coordinates*/
   car_lat = gps_msg.latitude = velMsg->latitude;
   car_lon = gps_msg.longitude = velMsg->longitude;
-
-  yaw = (90 + velMsg->azimuth) * swri_math_util::_deg_2_rad;
-
+  /*get car z orientation - relative to the world frame*/
+  yaw = (velMsg->azimuth) * swri_math_util::_deg_2_rad;
   yaw_1 = swri_math_util::WrapRadians(yaw, swri_math_util::_pi);
-
-  std::string zone;
+  /*transform coordinates to UTM and create rotation matrix*/
   gps_common::LLtoUTM(car_lat, car_lon, carUTM(0), carUTM(1), zone);
-  // std::cout << yaw_1 << std::endl;
-  rotationMatrix << cos(yaw_1), -sin(yaw_1), sin(yaw_1), cos(yaw_1);
+  rotationMatrix << cos(yaw_1), sin(yaw_1), -sin(yaw_1), cos(yaw_1);
 }
 
 void QuantEval::getDensityGrid(const nav_msgs::OccupancyGrid &msgGrid)
 {
+  /*get grid information to create new grids*/
   info = msgGrid.info;
   header = msgGrid.header;
-
   nc = msgGrid.info.height;
   nl = msgGrid.info.width;
   pace = msgGrid.info.resolution;
@@ -133,6 +131,7 @@ void QuantEval::getDensityGrid(const nav_msgs::OccupancyGrid &msgGrid)
 
 void QuantEval::getEdgeGrid(const nav_msgs::OccupancyGrid &msgGrid)
 {
+  /*get data from grid to study and place it in a matrix*/
   std::vector<int8_t> points_to_clean;
   nc = msgGrid.info.height;
   nl = msgGrid.info.width;
@@ -152,21 +151,29 @@ void QuantEval::getEdgeGrid(const nav_msgs::OccupancyGrid &msgGrid)
 /**********************LOOP FUNCTION*************************/
 void QuantEval::LoopFunction()
 {
-  // std::cout << "latitude: " << std::setprecision(20) << lat << "; longitude: " << lon << std::endl;
   if (car_lon < -7 && car_lon > -9 && car_lat > 39 && car_lat < 41 && pace > 0.1)
   {
     gps_pub.publish(gps_msg);
+    // std::cout << "1" << std::endl;
     handle << FormatPlacemark(car_lat, car_lon);
+    // std::cout << "2" << std::endl;
     DistanceToCar();
+    // std::cout << "3" << std::endl;
     gt_pub.publish(GTGrid);
+    // std::cout << "4" << std::endl;
 
     CleanLimits();
+    // std::cout << "5" << std::endl;
     cleangrid_pub.publish(EdgeGrid);
+    // std::cout << "6" << std::endl;
 
-    StatisticMeasures();
+    if (gt_coincident != 0)
+      StatisticMeasures();
+    // std::cout << "7" << std::endl;
   }
 }
 /************************************************************/
+
 
 std::vector<string> QuantEval::ReadKml(string path)
 {
@@ -176,6 +183,7 @@ std::vector<string> QuantEval::ReadKml(string path)
   std::size_t found_i, found_f;
   std::stringstream strStream;
 
+/*open kml files with groundtruth limits*/
   handle_kml.open(path);
 
   if (!handle_kml.is_open())
@@ -183,7 +191,7 @@ std::vector<string> QuantEval::ReadKml(string path)
   else
   {
     std::cout << "opened files" << std::endl;
-    strStream << handle_kml.rdbuf(); // read the file
+    strStream << handle_kml.rdbuf();  // read the file
     file_content = strStream.str();
   }
 
@@ -209,7 +217,7 @@ std::vector<string> QuantEval::ReadKml(string path)
 
 void QuantEval::ConvertToCoordinates()
 {
-  coordinates_right = ReadKml("/home/daniela/catkin_ws/src/road_detection/Kml_files/RightPath.kml");
+  coordinates_right = ReadKml("/home/daniela/catkin_ws/src/road_detection/Kml_files/RightPathAhead.kml");
   /*separate in latitude and longitude*/
   int n_coord = 1;
   for (auto const &point : coordinates_right)
@@ -229,7 +237,7 @@ void QuantEval::ConvertToCoordinates()
     n_coord++;
   }
 
-  coordinates_left = ReadKml("/home/daniela/catkin_ws/src/road_detection/Kml_files/LeftPath.kml");
+  coordinates_left = ReadKml("/home/daniela/catkin_ws/src/road_detection/Kml_files/LeftPathAhead.kml");
   n_coord = 1;
   for (auto const &point : coordinates_left)
   {
@@ -264,24 +272,22 @@ void QuantEval::DistanceToCar()
   // limite direito da estrada
   for (int i = 0; i < coordinates_right.size() - 1; i++)
   {
-    std::string zone;
     gps_common::LLtoUTM(lat_right[i], lon_right[i], dx_r, dy_r, zone);
 
     crd_r << (-carUTM(0) + dx_r), (-carUTM(1) + dy_r);
     crd_r_correct = rotationMatrix * crd_r;
-    gt_dx_meters.push_back(crd_r_correct(0));
-    gt_dy_meters.push_back(crd_r_correct(1));
+    gt_dx_meters.push_back(crd_r_correct(0) + 2.925);
+    gt_dy_meters.push_back(-crd_r_correct(1));
   }
-  //limite esquerdo da estrada
+  // limite esquerdo da estrada
   for (int i = 0; i < coordinates_left.size() - 1; i++)
   {
-    std::string zone;
     gps_common::LLtoUTM(lat_left[i], lon_left[i], dx_l, dy_l, zone);
 
     crd_l << (-carUTM(0) + dx_l), (-carUTM(1) + dy_l);
     crd_l_correct = rotationMatrix * crd_l;
-    gt_dx_meters.push_back(crd_l_correct(0));
-    gt_dy_meters.push_back(crd_l_correct(1));
+    gt_dx_meters.push_back(crd_l_correct(0) + 2.925);
+    gt_dy_meters.push_back(-crd_l_correct(1));
   }
   // interpolate
   for (int i = 0; i < coordinates_left.size() + coordinates_right.size(); i++)
@@ -289,44 +295,28 @@ void QuantEval::DistanceToCar()
     // std::cout << "Dx: " << gt_dx_meters[i] << " and dy is: " << gt_dy_meters[i] << std::endl;
     for (int n = 1; n < (int)floor((gt_dx_meters[i + 1] - gt_dx_meters[i]) / pace); n++)
     {
-      std::vector<double> xData = {gt_dx_meters[i], gt_dx_meters[i + 1]};
-      std::vector<double> yData = {gt_dy_meters[i], gt_dy_meters[i + 1]};
+      std::vector<double> xData = { gt_dx_meters[i], gt_dx_meters[i + 1] };
+      std::vector<double> yData = { gt_dy_meters[i], gt_dy_meters[i + 1] };
       double x = gt_dx_meters[i] + pace * n;
       double y = interpolate(xData, yData, x, true);
       gt_dx_meters.push_back(x);
       gt_dy_meters.push_back(y);
     }
   }
-
+  gt_coincident = 0;
   for (int i = 0; i < gt_dx_meters.size(); i++)
   {
-    gt_coincident = true;
-    // std::cout << "inside cycle" << std::endl;
-    // std::cout << "Dx: " << gt_dx_meters[i] << " and dy is: " << gt_dy_meters[i] << std::endl;
     if (gt_dx_meters[i] <= (double)40 && gt_dx_meters[i] >= (double)0 && gt_dy_meters[i] >= (double)-20 &&
         gt_dy_meters[i] <= (double)20)
     {
-      // std::cout << "inside cycle for" << std::endl;
       lin = (int)floor(gt_dx_meters[i] / pace);
       col = (int)floor(gt_dy_meters[i] / pace) + 20 / pace;
 
-      // std::cout << "size of x: " << gt_dx_meters.size() << "; size of y: " << gt_dy_meters.size()
-      // << ". The size of the cycle should be: " << coordinates_left.size() + coordinates_right.size()
-      // << std::endl;
-
       if (lin + col * nl < N && lin < nl && col < nc)
       {
-        // std::cout << "the index of the vector is " << lin + col * nl << std::endl;
-        // std::cout << "lines: " << lin << "; col: " << col << std::endl;
-
         gt_points[lin + col * nl] = 100;
-
-        // std::cout << "acessed points in occupancy grid " << std::endl;
       }
-    }
-    else
-    {
-      gt_coincident = false;
+      gt_coincident++;
     }
   }
   GTGrid.data.clear();
@@ -335,7 +325,7 @@ void QuantEval::DistanceToCar()
 
 /**
  * @brief Function to only consider the first right and left limit to the car
- * 
+ *
  */
 void QuantEval::CleanLimits()
 {
@@ -375,52 +365,61 @@ void QuantEval::CleanLimits()
 
 void QuantEval::StatisticMeasures()
 {
-
   int TP, FP, TN, FN;
   double PPV, TNR, NPV, TPR;
+  TP = FP = TN = FN = PPV = TNR = NPV = TPR = 0;
 
-  if (handle_csv.is_open() && gt_coincident == true)
+  if (handle_csv.is_open())
   {
-    for (int i = 0; i < gt_points.size(); i++)
+    for (int i = 0; i < gt_points.size() - 1; i++)
     {
-      if (gt_points[i] == cleaned_edges[i] == 0) //true negative
+      std::cout << "GT: " << (int)gt_points[i] << " ; limits: " << (int)(cleaned_edges[i]) << std::endl;
+      if ((int)gt_points[i] == (int)cleaned_edges[i] && (int)gt_points[i] == 0)  // true negative
       {
         TN++;
       }
-      else if (gt_points[i] == cleaned_edges[i] != 0) //true positive
+      else if (((int)gt_points[i] == (int)cleaned_edges[i] || (int)gt_points[i] == (int)cleaned_edges[i - 1] ||
+                (int)gt_points[i] == (int)cleaned_edges[i + 1]) &&
+               (int)gt_points[i] == 100)  // true positive
       {
         TP++;
       }
-      else if (gt_points[i] != cleaned_edges[i] && cleaned_edges[i] != 0) //false positive
+      else if ((int)gt_points[i] != (int)cleaned_edges[i] && (int)cleaned_edges[i] == 100)  // false positive
       {
         FP++;
       }
-      else if (gt_points[i] != cleaned_edges[i] && cleaned_edges[i] == 0) //false negative
+      else if ((int)gt_points[i] != (int)cleaned_edges[i] && (int)cleaned_edges[i] == 0)  // false negative
       {
         FN++;
       }
+      else
+      {
+        ROS_WARN("Opsssssssssssss");
+      }
     }
+
+    std::cout << "TN: " << TN << " ; TP: " << TP << " ; FP: " << FP << " ; FN: " << FN << std::endl;
 
     switch (TN)
     {
-    case 0:
-      TNR = 0;
-      NPV = 0;
-      break;
-    default:
-      TNR = TN / (FP + TN);
-      NPV = TN / (TN + FN);
+      case 0:
+        TNR = 0;
+        NPV = 0;
+        break;
+      default:
+        TNR = static_cast<double>(TN) / static_cast<double>(FP + TN);  // sensitivity
+        NPV = static_cast<double>(TN) / static_cast<double>(TN + FN);
     }
 
     switch (TP)
     {
-    case 0:
-      PPV = 0;
-      TPR = 0;
-      break;
-    default:
-      PPV = TP / (TP + FP);
-      TPR = TP / (TP + FN);
+      case 0:
+        PPV = 0;
+        TPR = 0;
+        break;
+      default:
+        PPV = static_cast<double>(TP) / static_cast<double>(TP + FP);
+        TPR = static_cast<double>(TP) / static_cast<double>(TP + FN);
     }
 
     handle_csv << PPV << "," << TNR << "," << NPV << "," << TPR << "\n";
@@ -440,7 +439,6 @@ int main(int argc, char **argv)
   QuantEval reconstruct;
   reconstruct.StartHandle();
   reconstruct.ConvertToCoordinates();
-  reconstruct.CreateCSV();
 
   ros::Rate rate(50);
   while (ros::ok())
@@ -455,35 +453,21 @@ int main(int argc, char **argv)
   return 0;
 }
 
-void QuantEval::CreateCSV()
-{
-  handle_csv.exceptions(std::ofstream::failbit | std::ofstream::badbit);
-
-  char filename[100];
-
-  time_t theTime = time(NULL);
-  struct tm *aTime = localtime(&theTime);
-  int hour = aTime->tm_hour;
-  int min = aTime->tm_min;
-
-  sprintf(filename, "/home/daniela/catkin_ws/src/road_detection/eval_api/Results/CSV/Measures%dH_%dM.csv", hour, min);
-  // Open the KML file for writing:
-  handle_csv.open(filename);
-  handle_csv << "PPV,TNR,NPV,TPR\n";
-}
-
 void QuantEval::StartHandle()
 {
   handle.exceptions(std::ofstream::failbit | std::ofstream::badbit);
+  handle_csv.exceptions(std::ofstream::failbit | std::ofstream::badbit);
 
-  char filename[100];
+  char filename[150];
+  char filename_csv[150];
 
+  /*get time*/
   time_t theTime = time(NULL);
   struct tm *aTime = localtime(&theTime);
-
   int hour = aTime->tm_hour;
   int min = aTime->tm_min;
 
+  /*KML file with car path*/
   sprintf(filename, "/home/daniela/catkin_ws/src/road_detection/eval_api/Results/Path_%dH_%dM.kml", hour, min);
   // Open the KML file for writing:
   handle.open(filename);
@@ -496,6 +480,13 @@ void QuantEval::StartHandle()
   handle << "<LineString>\n";
   handle << "<tessellate>1</tessellate>\n";
   handle << "<coordinates>";
+
+  /*CSV file with statistical measures*/
+  sprintf(filename_csv, "/home/daniela/catkin_ws/src/road_detection/eval_api/Results/CSV/Measures%dH_%dM.csv", hour,
+          min);
+  // Open the KML file for writing:
+  handle_csv.open(filename_csv);
+  handle_csv << "PPV,TNR,NPV,TPR\n";
 }
 
 std::string QuantEval::FormatPlacemark(double lat1, double lon1)
@@ -520,8 +511,8 @@ double QuantEval::interpolate(vector<double> &xData, vector<double> &yData, doub
 {
   int size = xData.size();
 
-  int i = 0;                // find left end of interval for interpolation
-  if (x >= xData[size - 2]) // special case: beyond right end
+  int i = 0;                 // find left end of interval for interpolation
+  if (x >= xData[size - 2])  // special case: beyond right end
   {
     i = size - 2;
   }
@@ -531,8 +522,8 @@ double QuantEval::interpolate(vector<double> &xData, vector<double> &yData, doub
       i++;
   }
   double xL = xData[i], yL = yData[i], xR = xData[i + 1],
-         yR = yData[i + 1]; // points on either side (unless beyond ends)
-  if (!extrapolate)         // if beyond ends of array and not extrapolating
+         yR = yData[i + 1];  // points on either side (unless beyond ends)
+  if (!extrapolate)          // if beyond ends of array and not extrapolating
   {
     if (x < xL)
       yR = yL;
@@ -540,7 +531,7 @@ double QuantEval::interpolate(vector<double> &xData, vector<double> &yData, doub
       yL = yR;
   }
 
-  double dydx = (yR - yL) / (xR - xL); // gradient
+  double dydx = (yR - yL) / (xR - xL);  // gradient
 
-  return yL + dydx * (x - xL); // linear interpolation
+  return yL + dydx * (x - xL);  // linear interpolation
 }
