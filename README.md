@@ -3,7 +3,29 @@ Files and code included in the masters thesis
 
 # Installation
 
-This program was created for ROS melodic. For more informations go to http://wiki.ros.org/melodic
+This program was created for ROS melodic. For more informations go to http://wiki.ros.org/melodic. 
+
+It is necessary to install the following packages: 
+- novatel-gps-driver
+- pcl-ros
+- grid-map 
+- (...)
+
+To install a package, use:
+
+```bash
+sudo apt install ros-melodic-$PACKAGE_NAME$
+```
+
+Install OpenCV by running:
+
+```bash
+[compiler] sudo apt-get install build-essential
+[required] sudo apt-get install cmake git libgtk2.0-dev pkg-config libavcodec-dev libavformat-dev libswscale-dev
+[optional] sudo apt-get install python-dev python-numpy libtbb2 libtbb-dev libjpeg-dev libpng-dev libtiff-dev libjasper-dev libdc1394-22-dev
+```
+
+To install PCL, please read http://www.pointclouds.org/downloads/linux.html. 
 
 # Usage
 
