@@ -3,6 +3,8 @@ Files and code included in the masters thesis
 
 # Installation
 
+This program was created for ROS melodic. For more informations go to http://wiki.ros.org/melodic
+
 # Usage
 
 Inside the catkin_ws, first compile the package driver_base:
