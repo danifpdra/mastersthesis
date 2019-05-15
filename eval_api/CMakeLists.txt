@@ -25,6 +25,7 @@ find_package(catkin REQUIRED COMPONENTS
   grid_map_cv
   swri_math_util
 )
+find_package(OpenCV REQUIRED)
 find_package(cmake_modules)
 find_package(Eigen REQUIRED)
 # find_package(OpenCV REQUIRED OpenCv 3.2.0)

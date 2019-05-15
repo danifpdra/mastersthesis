@@ -93,13 +93,7 @@ private:
  *
  */
 NegObstc::NegObstc()
-  : it(nh)
-  , temporalGridMap({ "density" })
-  , cannyGridMap({ "canny" })
-  , laplaceGridMap({ "laplacian" })
-  , sobelGridMap({ "sobel" })
-  , sobelGxGridMap({ "sobelX" })
-  , sobelGyGridMap({ "sobelY" })
+    : it(nh), temporalGridMap({"density"}), cannyGridMap({"canny"}), laplaceGridMap({"laplacian"}), sobelGridMap({"sobel"}), sobelGxGridMap({"sobelX"}), sobelGyGridMap({"sobelY"})
 {
   /*publishers and subscribers*/
   density_pub = nh.advertise<nav_msgs::OccupancyGrid>("density_pub", 1, true);
@@ -149,6 +143,7 @@ void NegObstc::LoopFunction()
 
 void NegObstc::Publishers()
 {
+  // std::cout << "here" << std::endl;
   /*occupancy grids*/
   density_pub.publish(densityGrid);
 
@@ -187,35 +182,38 @@ void NegObstc::GetPointCloud(const sensor_msgs::PointCloud2ConstPtr &cloud_msg)
 
 void NegObstc::ImageConversion()
 {
-  msg_density = cv_bridge::CvImage{ header, "mono8", temporal_image }.toImageMsg();
+  // std::cout << "started in imaged conversion" << std::endl;
+  msg_density = cv_bridge::CvImage{header, "mono8", temporal_image}.toImageMsg();
 
-  msg_canny = cv_bridge::CvImage{ header, "mono8", canny_img }.toImageMsg();
+  msg_canny = cv_bridge::CvImage{header, "mono8", canny_img}.toImageMsg();
   grid_map::GridMapRosConverter::initializeFromImage(*msg_canny, pace, cannyGridMap);
   grid_map::GridMapRosConverter::addLayerFromImage(*msg_canny, "canny", cannyGridMap, 0, 255, 0.5);
   grid_map::GridMapRosConverter::toOccupancyGrid(cannyGridMap, "canny", 150, 255, cannyGrid);
   cannyGrid.info = info;
 
-  msg_laplace = cv_bridge::CvImage{ header, "mono8", laplace_img }.toImageMsg();
+  msg_laplace = cv_bridge::CvImage{header, "mono8", laplace_img}.toImageMsg();
   grid_map::GridMapRosConverter::initializeFromImage(*msg_laplace, pace, laplaceGridMap);
   grid_map::GridMapRosConverter::addLayerFromImage(*msg_laplace, "laplacian", laplaceGridMap, 0, 255, 0.7);
   grid_map::GridMapRosConverter::toOccupancyGrid(laplaceGridMap, "laplacian", 175, 255, laplaceGrid);
   laplaceGrid.info = info;
 
-  msg_sobel = cv_bridge::CvImage{ header, "mono8", sobel_img }.toImageMsg();
+  msg_sobel = cv_bridge::CvImage{header, "mono8", sobel_img}.toImageMsg();
   grid_map::GridMapRosConverter::initializeFromImage(*msg_sobel, pace, sobelGridMap);
   grid_map::GridMapRosConverter::addLayerFromImage(*msg_sobel, "sobel", sobelGridMap, 0, 255, 0.7);
   grid_map::GridMapRosConverter::toOccupancyGrid(sobelGridMap, "sobel", 130, 255, sobelGrid);
 
-  msg_sobelX = cv_bridge::CvImage{ header, "mono8", sobel_grad_x }.toImageMsg();
+  msg_sobelX = cv_bridge::CvImage{header, "mono8", sobel_grad_x}.toImageMsg();
   grid_map::GridMapRosConverter::initializeFromImage(*msg_sobelX, pace, sobelGxGridMap);
   grid_map::GridMapRosConverter::addLayerFromImage(*msg_sobelX, "sobelX", sobelGxGridMap, 0, 255, 0.7);
   grid_map::GridMapRosConverter::toOccupancyGrid(sobelGxGridMap, "sobelX", 150, 255, sobelGxGrid);
 
-  msg_sobelY = cv_bridge::CvImage{ header, "mono8", sobel_grad_y }.toImageMsg();
+  msg_sobelY = cv_bridge::CvImage{header, "mono8", sobel_grad_y}.toImageMsg();
   grid_map::GridMapRosConverter::initializeFromImage(*msg_sobelY, pace, sobelGyGridMap);
   grid_map::GridMapRosConverter::addLayerFromImage(*msg_sobelY, "sobelY", sobelGyGridMap, 0, 255, 0.7);
   grid_map::GridMapRosConverter::toOccupancyGrid(sobelGyGridMap, "sobelY", 150, 255, sobelGyGrid);
   sobelGrid.info = sobelGxGrid.info = sobelGyGrid.info = info;
+
+  // std::cout << "ended in imaged conversion" << std::endl;
 }
 
 /**
@@ -233,15 +231,10 @@ void NegObstc::EdgeDetection()
   canny_img.create(temporal_image.size(), temporal_image.type());
 
   /* Reduce noise with a kernel 3x3*/
-  // cv::blur(temporal_image, blur_img, cv::Size(3, 3));
-  cv::threshold(temporal_image, blur_img, 170, 255, cv::THRESH_OTSU);
-  int nz = cv::countNonZero(temporal_image);
-  temporal_image.at<uchar>(y, x) = 0;
-  if (nz < N / 2)
-    cv::threshold(blur_img, blur_img, 150, 255, cv::THRESH_BINARY_INV);
+  bitwise_not(temporal_image, blur_img);
 
   /* Canny detector*/
-  cv::Canny(temporal_image, detected_edges, 200, 255, 3);
+  cv::Canny(blur_img, detected_edges, 160, 255, 3);
   canny_img = cv::Scalar::all(0);
   temporal_image.copyTo(canny_img, detected_edges);
 
@@ -250,12 +243,10 @@ void NegObstc::EdgeDetection()
   convertScaleAbs(laplace_img, laplace_img);
 
   /* Sobel - Gradient X */
-  // Scharr( src_gray, grad_x, ddepth, 1, 0, scale, delta, BORDER_DEFAULT );
   cv::Sobel(temporal_image, sobel_grad_x, CV_16S, 1, 0, kernel_size, 1, 0, cv::BORDER_DEFAULT);
   convertScaleAbs(sobel_grad_x, sobel_grad_x);
 
   /* Sobel - Gradient Y*/
-  // Scharr( src_gray, grad_y, ddepth, 0, 1, scale, delta, BORDER_DEFAULT );
   cv::Sobel(temporal_image, sobel_grad_y, CV_16S, 0, 1, kernel_size, 1, 0, cv::BORDER_DEFAULT);
   cv::convertScaleAbs(sobel_grad_y, sobel_grad_y);
 
@@ -265,7 +256,7 @@ void NegObstc::EdgeDetection()
 
 void NegObstc::DensityCalculation()
 {
-  pace = 0.4;  //((float)((int)(pace * 10))) / 10;
+  pace = 0.5; //((float)((int)(pace * 10))) / 10;
   nl = 40 / pace;
   nc = 40 / pace;
   N = nc * nl;
@@ -342,7 +333,7 @@ void NegObstc::GradientCalculation()
       gradYGrid.header = prewittGrid.header = kirshGrid.header = header;
   densityGrid.info = densityGridUp.info = densityGridDown.info = info;
   gradGrid.info = gradXGrid.info = gradYGrid.info = info_grad;
-  sobelGxGrid.info = sobelGyGrid.info = prewittGrid.info = kirshGrid.info = info_sobel;
+  prewittGrid.info = kirshGrid.info = info_sobel;
 
   /*cubelist marker with gradient colorbar*/
   gradient_2d grad[nc - 1][nl - 1];
@@ -353,8 +344,9 @@ void NegObstc::GradientCalculation()
   {
     for (int l = 0; l < nl - 1; l++)
     {
-      grad[l][c].vertical = densityMatrix(l + 1, c) - densityMatrix(l, c);
-      grad[l][c].horizontal = densityMatrix(l, c + 1) - densityMatrix(l, c);
+      int c1=c+1;
+      grad[l][c].vertical = -densityMatrix(l + 1, c1) + densityMatrix(l, c1);
+      grad[l][c].horizontal = -densityMatrix(l, c1 - 1) + densityMatrix(l, c1);
       grad[l][c].grad_tot =
           abs(static_cast<double>(grad[l][c].vertical)) + abs(static_cast<double>(grad[l][c].horizontal));
 
@@ -365,9 +357,9 @@ void NegObstc::GradientCalculation()
         prewitt_grad[ls][cs].gx = (-1) * densityMatrix(ls + 1, cs - 1) - densityMatrix(ls, cs - 1) -
                                   densityMatrix(ls - 1, cs - 1) + densityMatrix(ls + 1, cs + 1) +
                                   densityMatrix(ls, cs + 1) + densityMatrix(ls - 1, cs + 1);
-        prewitt_grad[ls][cs].gy = (-1) * densityMatrix(ls - 1, cs - 1) - densityMatrix(ls - 1) -
-                                  densityMatrix(ls - 1, cs + 1) + densityMatrix(ls + 1, cs - 1) +
-                                  densityMatrix(ls + 1, cs) + densityMatrix(ls + 1, cs + 1);
+        prewitt_grad[ls][cs].gy = densityMatrix(ls - 1, cs - 1) + densityMatrix(ls - 1, cs) +
+                                  densityMatrix(ls - 1, cs + 1) - densityMatrix(ls + 1, cs - 1) -
+                                  densityMatrix(ls + 1, cs) - densityMatrix(ls + 1, cs + 1);
 
         prewitt_grad[ls][cs].prewitt = abs(prewitt_grad[ls][cs].gx) + abs(prewitt_grad[ls][cs].gy);
 
@@ -382,15 +374,41 @@ void NegObstc::GradientCalculation()
 
         kirsh_grad[ls][cs].kirsh = abs(kirsh_grad[ls][cs].gx) / 5 + abs(kirsh_grad[ls][cs].gy) / 5;
 
-        prewitt_points[s] = Threshold(prewitt_grad[ls][cs].prewitt / (3 * max) * 100, 70);
-        kirsh_points[s] = Threshold(kirsh_grad[ls][cs].kirsh, 70);
+        //       prewitt_points[s] = prewitt_grad[ls][cs].prewitt;
+        //       kirsh_points[s] = kirsh_grad[ls][cs].kirsh;
+
+        //       s++;
+        //     }
+
+        //     grad_points[j] = grad[l][c].grad_tot;
+        //     grad_x_points[j] = abs(grad[l][c].vertical);
+        //     grad_y_points[j] = abs(grad[l][c].horizontal);
+
+        //     j++;
+        //   }
+        // }
+
+        // gradGrid.data = Threshold2(grad_points, 40);
+        // ROS_WARN("Grad mag");
+        // gradXGrid.data = Threshold2(grad_x_points, 40);
+        // ROS_WARN("Grad x");
+        // gradYGrid.data = Threshold2(grad_y_points, 40);
+        // ROS_WARN("Grad y");
+
+        // prewittGrid.data = Threshold2(prewitt_points, 40);
+        // ROS_WARN("prewitt");
+        // kirshGrid.data = Threshold2(kirsh_points, 40);
+        // ROS_WARN("Kirsh");
+        // std::cout << kirshGrid.data.size() << std::endl;
+        prewitt_points[s] = Threshold(prewitt_grad[ls][cs].prewitt / max * 100, 40);
+        kirsh_points[s] = Threshold(kirsh_grad[ls][cs].kirsh, 40);
 
         s++;
       }
 
-      grad_points[j] = Threshold(grad[l][c].grad_tot, 70);
-      grad_x_points[j] = Threshold(abs(grad[l][c].vertical), 70);
-      grad_y_points[j] = Threshold(abs(grad[l][c].horizontal), 70);
+      grad_points[j] = Threshold(grad[l][c].grad_tot, 40);
+      grad_x_points[j] = Threshold(abs(grad[l][c].vertical), 40);
+      grad_y_points[j] = Threshold(abs(grad[l][c].horizontal), 40);
 
       j++;
     }

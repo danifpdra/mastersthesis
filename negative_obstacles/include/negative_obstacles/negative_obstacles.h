@@ -12,7 +12,7 @@
 
 //-----------------
 #include <math.h>
-#include <algorithm>  // std::max
+#include <algorithm> // std::max
 #include <boost/foreach.hpp>
 #include <boost/thread/thread.hpp>
 #include <cmath>
@@ -79,65 +79,65 @@ color colorbar(int level)
 
   switch (level)
   {
-    case -5:
-      color_rgb.r = 0;
-      color_rgb.g = 0;
-      color_rgb.b = 0.5;
-      break;
-    case -4:
-      color_rgb.r = 0;
-      color_rgb.g = 0;
-      color_rgb.b = 0.84;
-      break;
-    case -3:
-      color_rgb.r = 0;
-      color_rgb.g = 0.27;
-      color_rgb.b = 1;
-      break;
-    case -2:
-      color_rgb.r = 0;
-      color_rgb.g = 0.64;
-      color_rgb.b = 1;
-      break;
-    case -1:
-      color_rgb.r = 0.137;
-      color_rgb.g = 1;
-      color_rgb.b = 0.82;
-      break;
-    case 0:
-      color_rgb.r = 0.5;
-      color_rgb.g = 1;
-      color_rgb.b = 0.5;
-      break;
-    case 1:
-      color_rgb.r = 0.82;
-      color_rgb.g = 1;
-      color_rgb.b = 0.137;
-      break;
-    case 2:
-      color_rgb.r = 1;
-      color_rgb.g = 0.64;
-      color_rgb.b = 0;
-      break;
-    case 3:
-      color_rgb.r = 1;
-      color_rgb.g = 0.27;
-      color_rgb.b = 0;
-      break;
-    case 4:
-      color_rgb.r = 0.84;
-      color_rgb.g = 0;
-      color_rgb.b = 0;
-      break;
-    case 5:
-      color_rgb.r = 0.5;
-      color_rgb.g = 0;
-      color_rgb.b = 0;
-      break;
-    default:
-      color_rgb.r = 0.53;
-      color_rgb.g = 0.53;
-      color_rgb.b = 0.53;
+  case -5:
+    color_rgb.r = 0;
+    color_rgb.g = 0;
+    color_rgb.b = 0.5;
+    break;
+  case -4:
+    color_rgb.r = 0;
+    color_rgb.g = 0;
+    color_rgb.b = 0.84;
+    break;
+  case -3:
+    color_rgb.r = 0;
+    color_rgb.g = 0.27;
+    color_rgb.b = 1;
+    break;
+  case -2:
+    color_rgb.r = 0;
+    color_rgb.g = 0.64;
+    color_rgb.b = 1;
+    break;
+  case -1:
+    color_rgb.r = 0.137;
+    color_rgb.g = 1;
+    color_rgb.b = 0.82;
+    break;
+  case 0:
+    color_rgb.r = 0.5;
+    color_rgb.g = 1;
+    color_rgb.b = 0.5;
+    break;
+  case 1:
+    color_rgb.r = 0.82;
+    color_rgb.g = 1;
+    color_rgb.b = 0.137;
+    break;
+  case 2:
+    color_rgb.r = 1;
+    color_rgb.g = 0.64;
+    color_rgb.b = 0;
+    break;
+  case 3:
+    color_rgb.r = 1;
+    color_rgb.g = 0.27;
+    color_rgb.b = 0;
+    break;
+  case 4:
+    color_rgb.r = 0.84;
+    color_rgb.g = 0;
+    color_rgb.b = 0;
+    break;
+  case 5:
+    color_rgb.r = 0.5;
+    color_rgb.g = 0;
+    color_rgb.b = 0;
+    break;
+  default:
+    color_rgb.r = 0.53;
+    color_rgb.g = 0.53;
+    color_rgb.b = 0.53;
   }
 
   return color_rgb;
@@ -322,4 +322,26 @@ int Threshold(double G, double lim)
     level = 0;
 
   return level;
+}
+
+std::vector<int8_t> Threshold2(std::vector<int8_t> vec, double lim)
+{
+  double max = *std::max_element(vec.begin(), vec.end());
+  std::vector<int8_t> finalvec;
+  finalvec.clear();
+  finalvec.resize(vec.size());
+  // int level;
+  for (int i = 0; i < vec.size(); i++)
+  {
+    std::cout << "iteration " << i << " size " << vec.size() << std::endl;
+    double G = (double)vec[i] / max * 100;
+    if (G > lim)
+      finalvec[i] = 100;
+    else
+      finalvec[i] = 0;
+
+    // finalvec[i] = level;
+  }
+
+  return finalvec;
 }

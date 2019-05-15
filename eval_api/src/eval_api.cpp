@@ -34,7 +34,16 @@
 #include <opencv2/opencv.hpp>
 #include "opencv2/imgproc/imgproc.hpp"
 
-#include <unistd.h>  //Sleep
+/* openCv*/
+#include <image_transport/image_transport.h>
+#include <opencv2/core/eigen.hpp>
+
+/*Grid maps*/
+#include <grid_map_core/grid_map_core.hpp>
+#include "grid_map_cv/GridMapCvConverter.hpp"
+#include "grid_map_ros/GridMapRosConverter.hpp"
+
+#include <unistd.h> //Sleep
 
 using namespace std;
 
@@ -61,7 +70,7 @@ private:
   std::string str_i, str_f;
   std::ofstream handle, handle_csv;
   ros::Subscriber velocity_sub, grid_sub, laplacian_sub;
-  ros::Publisher gps_pub, gt_pub, cleangrid_pub;
+  ros::Publisher gps_pub, gt_pub, cleangrid_pub, img_pub_result;
 
   // to read kml
   std::vector<string> coordinates_right, coordinates_left;
@@ -80,6 +89,10 @@ private:
   Eigen::Vector2d carUTM;
   Eigen::MatrixXd matToClean;
 
+  grid_map::GridMap GTGridMap, EdgeGridMap;
+  cv::Mat gt_img, edge_img, result;
+  sensor_msgs::ImagePtr msg_result;
+
   void getVelocity(const novatel_gps_msgs::InspvaPtr &velMsg);
   void getDensityGrid(const nav_msgs::OccupancyGrid &msgGrid);
   void getEdgeGrid(const nav_msgs::OccupancyGrid &msgGrid);
@@ -88,11 +101,12 @@ private:
   double interpolate(vector<double> &xData, vector<double> &yData, double x, bool extrapolate);
   void StatisticMeasures();
   void CleanLimits();
+  void Correlation();
 };
 
 /**********************************************************/
 /**********************CONSTRUCTOR*************************/
-QuantEval::QuantEval() : str_i({ "<coordinates>" }), str_f({ "</coordinates>" })
+QuantEval::QuantEval() : str_i({"<coordinates>"}), str_f({"</coordinates>"}), GTGridMap({"groundtruth"}), EdgeGridMap({"edge_detection"})
 {
   velocity_sub = nh.subscribe("inspva", 10, &QuantEval::getVelocity, this);
   grid_sub = nh.subscribe("density_pub", 10, &QuantEval::getDensityGrid, this);
@@ -101,6 +115,8 @@ QuantEval::QuantEval() : str_i({ "<coordinates>" }), str_f({ "</coordinates>" })
   gps_pub = nh.advertise<gps_common::GPSFix>("gps_pub", 1, true);
   gt_pub = nh.advertise<nav_msgs::OccupancyGrid>("gt_pub", 1, true);
   cleangrid_pub = nh.advertise<nav_msgs::OccupancyGrid>("cleangrid_pub", 1, true);
+
+  img_pub_result = nh.advertise<sensor_msgs::Image>("result_img", 10);
 }
 
 /********************************************************/
@@ -170,10 +186,11 @@ void QuantEval::LoopFunction()
     if (gt_coincident != 0)
       StatisticMeasures();
     // std::cout << "7" << std::endl;
+
+    Correlation();
   }
 }
 /************************************************************/
-
 
 std::vector<string> QuantEval::ReadKml(string path)
 {
@@ -183,7 +200,7 @@ std::vector<string> QuantEval::ReadKml(string path)
   std::size_t found_i, found_f;
   std::stringstream strStream;
 
-/*open kml files with groundtruth limits*/
+  /*open kml files with groundtruth limits*/
   handle_kml.open(path);
 
   if (!handle_kml.is_open())
@@ -191,7 +208,7 @@ std::vector<string> QuantEval::ReadKml(string path)
   else
   {
     std::cout << "opened files" << std::endl;
-    strStream << handle_kml.rdbuf();  // read the file
+    strStream << handle_kml.rdbuf(); // read the file
     file_content = strStream.str();
   }
 
@@ -295,8 +312,8 @@ void QuantEval::DistanceToCar()
     // std::cout << "Dx: " << gt_dx_meters[i] << " and dy is: " << gt_dy_meters[i] << std::endl;
     for (int n = 1; n < (int)floor((gt_dx_meters[i + 1] - gt_dx_meters[i]) / pace); n++)
     {
-      std::vector<double> xData = { gt_dx_meters[i], gt_dx_meters[i + 1] };
-      std::vector<double> yData = { gt_dy_meters[i], gt_dy_meters[i + 1] };
+      std::vector<double> xData = {gt_dx_meters[i], gt_dx_meters[i + 1]};
+      std::vector<double> yData = {gt_dy_meters[i], gt_dy_meters[i + 1]};
       double x = gt_dx_meters[i] + pace * n;
       double y = interpolate(xData, yData, x, true);
       gt_dx_meters.push_back(x);
@@ -365,30 +382,31 @@ void QuantEval::CleanLimits()
 
 void QuantEval::StatisticMeasures()
 {
-  int TP, FP, TN, FN;
-  double PPV, TNR, NPV, TPR;
-  TP = FP = TN = FN = PPV = TNR = NPV = TPR = 0;
+  int TP, FP, TN, FN, beta;
+  double PPV, TNR, NPV, TPR, FPace;
+  TP = FP = TN = FN = PPV = TNR = NPV = TPR = FPace = 0;
+  beta = 1;
 
   if (handle_csv.is_open())
   {
     for (int i = 0; i < gt_points.size() - 1; i++)
     {
       std::cout << "GT: " << (int)gt_points[i] << " ; limits: " << (int)(cleaned_edges[i]) << std::endl;
-      if ((int)gt_points[i] == (int)cleaned_edges[i] && (int)gt_points[i] == 0)  // true negative
+      if ((int)gt_points[i] == (int)cleaned_edges[i] && (int)gt_points[i] == 0) // true negative
       {
         TN++;
       }
       else if (((int)gt_points[i] == (int)cleaned_edges[i] || (int)gt_points[i] == (int)cleaned_edges[i - 1] ||
                 (int)gt_points[i] == (int)cleaned_edges[i + 1]) &&
-               (int)gt_points[i] == 100)  // true positive
+               (int)gt_points[i] == 100) // true positive
       {
         TP++;
       }
-      else if ((int)gt_points[i] != (int)cleaned_edges[i] && (int)cleaned_edges[i] == 100)  // false positive
+      else if ((int)gt_points[i] != (int)cleaned_edges[i] && (int)cleaned_edges[i] == 100) // false positive
       {
         FP++;
       }
-      else if ((int)gt_points[i] != (int)cleaned_edges[i] && (int)cleaned_edges[i] == 0)  // false negative
+      else if ((int)gt_points[i] != (int)cleaned_edges[i] && (int)cleaned_edges[i] == 0) // false negative
       {
         FN++;
       }
@@ -402,28 +420,57 @@ void QuantEval::StatisticMeasures()
 
     switch (TN)
     {
-      case 0:
-        TNR = 0;
-        NPV = 0;
-        break;
-      default:
-        TNR = static_cast<double>(TN) / static_cast<double>(FP + TN);  // sensitivity
-        NPV = static_cast<double>(TN) / static_cast<double>(TN + FN);
+    case 0:
+      TNR = 0;
+      NPV = 0;
+      break;
+    default:
+      TNR = static_cast<double>(TN) / static_cast<double>(FP + TN); // sensitivity
+      NPV = static_cast<double>(TN) / static_cast<double>(TN + FN);
     }
 
     switch (TP)
     {
-      case 0:
-        PPV = 0;
-        TPR = 0;
-        break;
-      default:
-        PPV = static_cast<double>(TP) / static_cast<double>(TP + FP);
-        TPR = static_cast<double>(TP) / static_cast<double>(TP + FN);
+    case 0:
+      PPV = 0;
+      TPR = 0;
+      break;
+    default:
+      PPV = static_cast<double>(TP) / static_cast<double>(TP + FP);
+      TPR = static_cast<double>(TP) / static_cast<double>(TP + FN);
+      FPace=(1+beta*beta)*(PPV*TPR)/(beta*beta*(PPV+TPR));
     }
 
-    handle_csv << PPV << "," << TNR << "," << NPV << "," << TPR << "\n";
+    handle_csv << PPV << "," << TNR << "," << NPV << "," << TPR << "," << FPace <<  "\n";
   }
+}
+
+void QuantEval::Correlation()
+{
+
+  /*convert ground truth*/
+  grid_map::GridMapRosConverter::fromOccupancyGrid(GTGrid, "groundtruth", GTGridMap);
+  grid_map::GridMapCvConverter::toImage<unsigned char, 1>(GTGridMap, "groundtruth", CV_8UC1, gt_img);
+  /*convert cleaned limits*/
+  grid_map::GridMapRosConverter::fromOccupancyGrid(EdgeGrid, "edge_detection", EdgeGridMap);
+  grid_map::GridMapCvConverter::toImage<unsigned char, 1>(EdgeGridMap, "edge_detection", CV_8UC1, edge_img);
+  /// Do the Matching and Normalize
+  cv::matchTemplate(edge_img, gt_img, result, CV_TM_CCORR);
+  cv::normalize(result, result, 0, 1, cv::NORM_MINMAX, -1, cv::Mat());
+
+  /// Localizing the best match with minMaxLoc
+  // double minVal;
+  // double maxVal;
+  // Point minLoc;
+  // Point maxLoc;
+  // Point matchLoc;
+
+  // minMaxLoc(result, &minVal, &maxVal, &minLoc, &maxLoc, Mat());
+
+  msg_result = cv_bridge::CvImage{header, "mono8", result}.toImageMsg();
+  // grid_map::GridMapRosConverter::initializeFromImage(*msg_result, pace, cannyGridMap);
+  // grid_map::GridMapRosConverter::addLayerFromImage(*msg_result, "canny", cannyGridMap, 0, 255, 0.5);
+  img_pub_result.publish(msg_result);
 }
 
 /**
@@ -486,7 +533,7 @@ void QuantEval::StartHandle()
           min);
   // Open the KML file for writing:
   handle_csv.open(filename_csv);
-  handle_csv << "PPV,TNR,NPV,TPR\n";
+  handle_csv << "PPV,TNR,NPV,TPR,F-Pace\n";
 }
 
 std::string QuantEval::FormatPlacemark(double lat1, double lon1)
@@ -511,8 +558,8 @@ double QuantEval::interpolate(vector<double> &xData, vector<double> &yData, doub
 {
   int size = xData.size();
 
-  int i = 0;                 // find left end of interval for interpolation
-  if (x >= xData[size - 2])  // special case: beyond right end
+  int i = 0;                // find left end of interval for interpolation
+  if (x >= xData[size - 2]) // special case: beyond right end
   {
     i = size - 2;
   }
@@ -522,8 +569,8 @@ double QuantEval::interpolate(vector<double> &xData, vector<double> &yData, doub
       i++;
   }
   double xL = xData[i], yL = yData[i], xR = xData[i + 1],
-         yR = yData[i + 1];  // points on either side (unless beyond ends)
-  if (!extrapolate)          // if beyond ends of array and not extrapolating
+         yR = yData[i + 1]; // points on either side (unless beyond ends)
+  if (!extrapolate)         // if beyond ends of array and not extrapolating
   {
     if (x < xL)
       yR = yL;
@@ -531,7 +578,7 @@ double QuantEval::interpolate(vector<double> &xData, vector<double> &yData, doub
       yL = yR;
   }
 
-  double dydx = (yR - yL) / (xR - xL);  // gradient
+  double dydx = (yR - yL) / (xR - xL); // gradient
 
-  return yL + dydx * (x - xL);  // linear interpolation
+  return yL + dydx * (x - xL); // linear interpolation
 }
