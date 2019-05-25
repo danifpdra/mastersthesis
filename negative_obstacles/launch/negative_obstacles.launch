@@ -11,7 +11,7 @@
     <!--Launch the visualization-->
     <node pkg="rviz" type="rviz" name="rviz" args="--display-config $(find negative_obstacles)/config/rviz.rviz" required="false"/>
 
-    
+
 
     <!-- Launch the node   -->
     <node pkg="free_space_detection" type="device_frame_publisher_node" name="device_frame_publisher" required="true" output="screen"/>
@@ -24,36 +24,37 @@
     <node type="laser_scan_assembler" pkg="laser_assembler" name="my_assembler0">
         <remap from="scan" to="/ld_rms/scan0"/>
         <remap from="assemble_scans2" to="assemble_scans0"/>
-        <param name="max_scans" type="int" value="150" />
+        <param name="max_scans" type="int" value="100" />
         <param name="fixed_frame" type="string" value="map" />
     </node>
     <node type="laser_scan_assembler" pkg="laser_assembler" name="my_assembler1">
         <remap from="scan" to="/ld_rms/scan1"/>
         <remap from="assemble_scans2" to="assemble_scans1"/>
-        <param name="max_scans" type="int" value="150" />
+        <param name="max_scans" type="int" value="100" />
         <param name="fixed_frame" type="string" value="map" />
     </node>
     <node type="laser_scan_assembler" pkg="laser_assembler" name="my_assembler2">
         <remap from="scan" to="/ld_rms/scan2"/>
         <remap from="assemble_scans2" to="assemble_scans2_"/>
-        <param name="max_scans" type="int" value="150" />
+        <param name="max_scans" type="int" value="100" />
         <param name="fixed_frame" type="string" value="map" />
     </node>
     <node type="laser_scan_assembler" pkg="laser_assembler" name="my_assembler3">
         <remap from="scan" to="/ld_rms/scan3"/>
         <remap from="assemble_scans2" to="assemble_scans3"/>
-        <param name="max_scans" type="int" value="150" />
+        <param name="max_scans" type="int" value="100" />
         <param name="fixed_frame" type="string" value="map" />
     </node>
 
-
+    <!-- <group ns="road_limits_detection"> -->
     <!-- Launch the node   -->
-    <node pkg="road_reconstruction" type="road_reconstruction" name="road_reconstruction" required="true" output="screen"/>
+    <!-- <node pkg="road_reconstruction" type="road_reconstruction" name="road_reconstruction" required="true" output="screen"/> -->
     <!-- Launch the node   -->
     <node pkg="negative_obstacles" type="negative_obstacles" name="negative_obstacles" required="true" output="screen"/>
-
+    <node pkg="negative_obstacles" type="cloud_assem" name="cloud_assem" required="true" output="screen"/>
     <!-- Launch the node   -->
     <node pkg="eval_api" type="eval_api" name="eval_api" required="true" output="screen"/>
+    <!-- </group> -->
 
     <!-- preciso para vizualizar corretamente no rviz -->
     <node pkg="swri_transform_util" type="initialize_origin.py" name="initialize_origin" output="screen">

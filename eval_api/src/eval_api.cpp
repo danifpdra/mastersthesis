@@ -74,7 +74,7 @@ private:
 
   // to read kml
   std::vector<string> coordinates_right, coordinates_left;
-  std::vector<double> lat_right, lat_left, lon_right, lon_left, gt_dx_meters, gt_dy_meters;
+  std::vector<double> lat_right, lat_left, lon_right, lon_left, gt_dx_meters, gt_dy_meters, gt_dx_meters_int, gt_dy_meters_int;
   std::vector<int8_t> gt_points, cleaned_edges;
   std::string zone;
 
@@ -101,7 +101,6 @@ private:
   double interpolate(vector<double> &xData, vector<double> &yData, double x, bool extrapolate);
   void StatisticMeasures();
   void CleanLimits();
-  void Correlation();
 };
 
 /**********************************************************/
@@ -186,8 +185,6 @@ void QuantEval::LoopFunction()
     if (gt_coincident != 0)
       StatisticMeasures();
     // std::cout << "7" << std::endl;
-
-    Correlation();
   }
 }
 /************************************************************/
@@ -234,7 +231,11 @@ std::vector<string> QuantEval::ReadKml(string path)
 
 void QuantEval::ConvertToCoordinates()
 {
-  coordinates_right = ReadKml("/home/daniela/catkin_ws/src/road_detection/Kml_files/RightPathAhead.kml");
+  lon_right.clear();
+  lat_right.clear();
+  lon_left.clear();
+  lat_left.clear();
+  coordinates_right = ReadKml("/home/daniela/catkin_ws/src/road_detection/Kml_files/RightPathSalinas.kml");
   /*separate in latitude and longitude*/
   int n_coord = 1;
   for (auto const &point : coordinates_right)
@@ -254,7 +255,7 @@ void QuantEval::ConvertToCoordinates()
     n_coord++;
   }
 
-  coordinates_left = ReadKml("/home/daniela/catkin_ws/src/road_detection/Kml_files/LeftPathAhead.kml");
+  coordinates_left = ReadKml("/home/daniela/catkin_ws/src/road_detection/Kml_files/LeftPathSalinas.kml");
   n_coord = 1;
   for (auto const &point : coordinates_left)
   {
@@ -272,6 +273,7 @@ void QuantEval::ConvertToCoordinates()
     }
     n_coord++;
   }
+  std::cout << "separated latitude and longitude" << std::endl;
 }
 
 void QuantEval::DistanceToCar()
@@ -310,7 +312,7 @@ void QuantEval::DistanceToCar()
   for (int i = 0; i < coordinates_left.size() + coordinates_right.size(); i++)
   {
     // std::cout << "Dx: " << gt_dx_meters[i] << " and dy is: " << gt_dy_meters[i] << std::endl;
-    for (int n = 1; n < (int)floor((gt_dx_meters[i + 1] - gt_dx_meters[i]) / pace); n++)
+    for (int n = 1; n < (int)floor((gt_dx_meters[i + 1] - gt_dx_meters[i]) / (pace*0.5)); n++)
     {
       std::vector<double> xData = {gt_dx_meters[i], gt_dx_meters[i + 1]};
       std::vector<double> yData = {gt_dy_meters[i], gt_dy_meters[i + 1]};
@@ -331,7 +333,24 @@ void QuantEval::DistanceToCar()
 
       if (lin + col * nl < N && lin < nl && col < nc)
       {
-        gt_points[lin + col * nl] = 100;
+        // gt_points[lin + col * nl] = 100;
+        int idx = col;
+        if (gt_dy_meters[i] > 0)
+        {
+          while (idx > nc/2)
+          {
+            gt_points[lin + idx * nl] = 100;
+            idx--;
+          }
+        }
+        else if (gt_dy_meters[i] < 0)
+        {
+          while (idx <= nc/2)
+          {
+            gt_points[lin + idx * nl] = 100;
+            idx++;
+          }
+        }
       }
       gt_coincident++;
     }
@@ -348,8 +367,9 @@ void QuantEval::CleanLimits()
 {
   cleaned_edges.clear();
   cleaned_edges.resize(N);
+  std::fill(cleaned_edges.begin(), cleaned_edges.end(), 100);
 
-  for (int i = 0; i < nl; i++)
+  for (int i = 0; i < nl; i++) // i é o nr de linhas e idx é o nr de colunas
   {
     int stop = 0;
     int idx = nc / 2;
@@ -357,7 +377,11 @@ void QuantEval::CleanLimits()
     {
       if (matToClean(i, idx) != 0)
       {
-        cleaned_edges[i + idx * nl] = 100;
+        while (idx < nc)
+        {
+          cleaned_edges[i + idx * nl] = 0;
+          idx++;
+        }
         stop = 1;
       }
       idx++;
@@ -368,7 +392,11 @@ void QuantEval::CleanLimits()
     {
       if (matToClean(i, idx) != 0)
       {
-        cleaned_edges[i + idx * nl] = 100;
+        while (idx >= 0)
+        {
+          cleaned_edges[i + idx * nl] = 0;
+          idx--;
+        }
         stop = 1;
       }
       idx--;
@@ -389,9 +417,8 @@ void QuantEval::StatisticMeasures()
 
   if (handle_csv.is_open())
   {
-    for (int i = 0; i < gt_points.size() - 1; i++)
+    for (int i = 0; i < gt_points.size() / 2 - 1; i++)
     {
-      std::cout << "GT: " << (int)gt_points[i] << " ; limits: " << (int)(cleaned_edges[i]) << std::endl;
       if ((int)gt_points[i] == (int)cleaned_edges[i] && (int)gt_points[i] == 0) // true negative
       {
         TN++;
@@ -425,7 +452,7 @@ void QuantEval::StatisticMeasures()
       NPV = 0;
       break;
     default:
-      TNR = static_cast<double>(TN) / static_cast<double>(FP + TN); // sensitivity
+      TNR = static_cast<double>(TN) / static_cast<double>(FP + TN); //specificity
       NPV = static_cast<double>(TN) / static_cast<double>(TN + FN);
     }
 
@@ -437,40 +464,12 @@ void QuantEval::StatisticMeasures()
       break;
     default:
       PPV = static_cast<double>(TP) / static_cast<double>(TP + FP);
-      TPR = static_cast<double>(TP) / static_cast<double>(TP + FN);
-      FPace=(1+beta*beta)*(PPV*TPR)/(beta*beta*(PPV+TPR));
+      TPR = static_cast<double>(TP) / static_cast<double>(TP + FN); // sensitivity
+      FPace = (1 + beta * beta) * (PPV * TPR) / (beta * beta * (PPV + TPR));
     }
 
-    handle_csv << PPV << "," << TNR << "," << NPV << "," << TPR << "," << FPace <<  "\n";
+    handle_csv << PPV << "," << TNR << "," << NPV << "," << TPR << "," << FPace << "\n";
   }
-}
-
-void QuantEval::Correlation()
-{
-
-  /*convert ground truth*/
-  grid_map::GridMapRosConverter::fromOccupancyGrid(GTGrid, "groundtruth", GTGridMap);
-  grid_map::GridMapCvConverter::toImage<unsigned char, 1>(GTGridMap, "groundtruth", CV_8UC1, gt_img);
-  /*convert cleaned limits*/
-  grid_map::GridMapRosConverter::fromOccupancyGrid(EdgeGrid, "edge_detection", EdgeGridMap);
-  grid_map::GridMapCvConverter::toImage<unsigned char, 1>(EdgeGridMap, "edge_detection", CV_8UC1, edge_img);
-  /// Do the Matching and Normalize
-  cv::matchTemplate(edge_img, gt_img, result, CV_TM_CCORR);
-  cv::normalize(result, result, 0, 1, cv::NORM_MINMAX, -1, cv::Mat());
-
-  /// Localizing the best match with minMaxLoc
-  // double minVal;
-  // double maxVal;
-  // Point minLoc;
-  // Point maxLoc;
-  // Point matchLoc;
-
-  // minMaxLoc(result, &minVal, &maxVal, &minLoc, &maxLoc, Mat());
-
-  msg_result = cv_bridge::CvImage{header, "mono8", result}.toImageMsg();
-  // grid_map::GridMapRosConverter::initializeFromImage(*msg_result, pace, cannyGridMap);
-  // grid_map::GridMapRosConverter::addLayerFromImage(*msg_result, "canny", cannyGridMap, 0, 255, 0.5);
-  img_pub_result.publish(msg_result);
 }
 
 /**
