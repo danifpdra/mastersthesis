@@ -188,46 +188,46 @@ void NegObstc::ImageConversion()
 
   msg_canny = cv_bridge::CvImage{header, "mono8", canny_img}.toImageMsg();
   grid_map::GridMapRosConverter::initializeFromImage(*msg_canny, pace, cannyGridMap);
-  grid_map::GridMapRosConverter::addLayerFromImage(*msg_canny, "canny", cannyGridMap, 0, 255, 0.5);
-  grid_map::GridMapRosConverter::toOccupancyGrid(cannyGridMap, "canny", 150, 255, cannyGrid);
+  grid_map::GridMapRosConverter::addLayerFromImage(*msg_canny, "canny", cannyGridMap, 0, 255,0);
+  grid_map::GridMapRosConverter::toOccupancyGrid(cannyGridMap, "canny", 50, 255, cannyGrid);
 
   /*try to remove small blobs*/
   cv::Mat element = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(1, 1));
   cv::morphologyEx(laplace_img, laplace_img, CV_MOP_OPEN, element);
   msg_laplace = cv_bridge::CvImage{header, "mono8", laplace_img}.toImageMsg();
   grid_map::GridMapRosConverter::initializeFromImage(*msg_laplace, pace, laplaceGridMap);
-  grid_map::GridMapRosConverter::addLayerFromImage(*msg_laplace, "laplacian", laplaceGridMap, 0, 255, 0.7);
-  grid_map::GridMapRosConverter::toOccupancyGrid(laplaceGridMap, "laplacian", 160, 255, laplaceGrid);
+  grid_map::GridMapRosConverter::addLayerFromImage(*msg_laplace, "laplacian", laplaceGridMap, 0, 255, 0);
+  grid_map::GridMapRosConverter::toOccupancyGrid(laplaceGridMap, "laplacian", 120, 255, laplaceGrid);
 
   msg_sobel = cv_bridge::CvImage{header, "mono8", sobel_img}.toImageMsg();
   grid_map::GridMapRosConverter::initializeFromImage(*msg_sobel, pace, sobelGridMap);
-  grid_map::GridMapRosConverter::addLayerFromImage(*msg_sobel, "sobel", sobelGridMap, 0, 255, 0.5);
-  grid_map::GridMapRosConverter::toOccupancyGrid(sobelGridMap, "sobel", 130, 255, sobelGrid);
+  grid_map::GridMapRosConverter::addLayerFromImage(*msg_sobel, "sobel", sobelGridMap, 0, 255, 0);
+  grid_map::GridMapRosConverter::toOccupancyGrid(sobelGridMap, "sobel", 50, 255, sobelGrid);
 
   msg_prewitt = cv_bridge::CvImage{header, "mono8", prewitt_img}.toImageMsg();
   grid_map::GridMapRosConverter::initializeFromImage(*msg_prewitt, pace, prewittGridMap);
-  grid_map::GridMapRosConverter::addLayerFromImage(*msg_prewitt, "prewitt", prewittGridMap, 0, 255, 0.5);
-  grid_map::GridMapRosConverter::toOccupancyGrid(prewittGridMap, "prewitt", 120, 255, prewittGrid);
+  grid_map::GridMapRosConverter::addLayerFromImage(*msg_prewitt, "prewitt", prewittGridMap, 0, 255, 0);
+  grid_map::GridMapRosConverter::toOccupancyGrid(prewittGridMap, "prewitt", 50, 255, prewittGrid);
 
   msg_kirsh = cv_bridge::CvImage{header, "mono8", kirsh_img}.toImageMsg();
   grid_map::GridMapRosConverter::initializeFromImage(*msg_kirsh, pace, kirshGridMap);
-  grid_map::GridMapRosConverter::addLayerFromImage(*msg_kirsh, "kirsh", kirshGridMap, 0, 255, 0.5);
+  grid_map::GridMapRosConverter::addLayerFromImage(*msg_kirsh, "kirsh", kirshGridMap, 0, 255, 0);
   grid_map::GridMapRosConverter::toOccupancyGrid(kirshGridMap, "kirsh", 120, 255, kirshGrid);
 
   msg_gmag = cv_bridge::CvImage{header, "mono8", grad_mag_img}.toImageMsg();
   grid_map::GridMapRosConverter::initializeFromImage(*msg_gmag, pace, gmagGridMap);
-  grid_map::GridMapRosConverter::addLayerFromImage(*msg_gmag, "grad_mag", gmagGridMap, 0, 255, 0.5);
-  grid_map::GridMapRosConverter::toOccupancyGrid(gmagGridMap, "grad_mag", 100, 255, gradGrid);
+  grid_map::GridMapRosConverter::addLayerFromImage(*msg_gmag, "grad_mag", gmagGridMap, 0, 255, 0);
+  grid_map::GridMapRosConverter::toOccupancyGrid(gmagGridMap, "grad_mag", 0, 255, gradGrid);
 
   msg_gx = cv_bridge::CvImage{header, "mono8", gx_img}.toImageMsg();
   grid_map::GridMapRosConverter::initializeFromImage(*msg_gx, pace, gxGridMap);
   grid_map::GridMapRosConverter::addLayerFromImage(*msg_gx, "gx", gxGridMap, 0, 255, 0.5);
-  grid_map::GridMapRosConverter::toOccupancyGrid(gxGridMap, "gx", 100, 255, gradXGrid);
+  grid_map::GridMapRosConverter::toOccupancyGrid(gxGridMap, "gx", 120, 255, gradXGrid);
 
   msg_gy = cv_bridge::CvImage{header, "mono8", gy_img}.toImageMsg();
   grid_map::GridMapRosConverter::initializeFromImage(*msg_gy, pace, gyGridMap);
   grid_map::GridMapRosConverter::addLayerFromImage(*msg_gy, "gy", gyGridMap, 0, 255, 0.5);
-  grid_map::GridMapRosConverter::toOccupancyGrid(gyGridMap, "gy", 100, 255, gradYGrid);
+  grid_map::GridMapRosConverter::toOccupancyGrid(gyGridMap, "gy", 120, 255, gradYGrid);
 
   /*give proper headers and info to grids*/
   gradGrid.info = gradXGrid.info = gradYGrid.info = sobelGrid.info = prewittGrid.info = kirshGrid.info = laplaceGrid.info = cannyGrid.info = info;
@@ -299,7 +299,7 @@ void NegObstc::EdgeDetection()
 
 void NegObstc::DensityCalculation()
 {
-  pace = 0.2; //((float)((int)(pace * 10))) / 10;
+  pace = 0.4;
   nl = 40 / pace;
   nc = 40 / pace;
   N = nc * nl;
