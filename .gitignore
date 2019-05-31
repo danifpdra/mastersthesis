@@ -59,3 +59,6 @@ rosbag_to_csv/
 velodyne/
 
 .vscode/*
+
+# ignoring results folder
+eval_api/Results/
