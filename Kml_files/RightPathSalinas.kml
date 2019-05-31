@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+	<name>RightPathSalinas.kml</name>
+	<StyleMap id="m_ylw-pushpin">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#s_ylw-pushpin</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#s_ylw-pushpin_hl</styleUrl>
+		</Pair>
+	</StyleMap>
+	<Style id="s_ylw-pushpin">
+		<IconStyle>
+			<scale>1.1</scale>
+			<Icon>
+				<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>
+			</Icon>
+			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
+		</IconStyle>
+	</Style>
+	<Style id="s_ylw-pushpin_hl">
+		<IconStyle>
+			<scale>1.3</scale>
+			<Icon>
+				<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>
+			</Icon>
+			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
+		</IconStyle>
+	</Style>
+	<Placemark>
+		<name>RightPathSalinas</name>
+		<styleUrl>#m_ylw-pushpin</styleUrl>
+		<LineString>
+			<tessellate>1</tessellate>
+			<coordinates>
+				-8.676099760711306,40.63461999903558,0 -8.676229052215328,40.63459252827116,0 -8.676382980158371,40.63455772428843,0 -8.676533924329831,40.63452615297166,0 -8.676705871020308,40.63448772751343,0 -8.676860772791329,40.63445299995519,0 -8.676994880224527,40.63442644071207,0 -8.677167621258244,40.63439137719821,0 -8.677332511174265,40.6343535220437,0 -8.677535769613135,40.63430944409252,0 -8.677721587572725,40.63426701265281,0 -8.6779070416236,40.63422907059833,0 -8.678177311263509,40.63416991552455,0 -8.678361831826557,40.6341316734744,0 -8.678547666281712,40.63409395775437,0 -8.678780507570261,40.63404044067511,0 -8.678925753032988,40.63400712076825,0 -8.679073159944945,40.63397660672024,0 -8.679194565703812,40.63395113098124,0 -8.679315819264033,40.63392243589038,0 
+			</coordinates>
+		</LineString>
+	</Placemark>
+</Document>
+</kml>

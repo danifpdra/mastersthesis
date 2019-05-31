@@ -154,6 +154,7 @@ include_directories(
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 add_executable(negative_obstacles src/negative_obstacles.cpp)
+add_executable(cloud_assem src/cloud_assembler.cpp)
 link_directories(${PCL_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS})
 
@@ -177,6 +178,15 @@ add_definitions(${PCL_DEFINITIONS})
    ${PCL_COMMON_LIBRARIES}
    ${PCL_IO_LIBRARIES}
    ${OpenCV_LIBS}
+)
+
+target_link_libraries(cloud_assem
+${catkin_LIBRARIES}
+${Eigen_LIBRARIES}
+${PCL_LIBRARIES}
+${PCL_COMMON_LIBRARIES}
+${PCL_IO_LIBRARIES}
+${OpenCV_LIBS}
 )
 
 #############

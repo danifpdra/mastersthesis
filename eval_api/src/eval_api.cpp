@@ -69,12 +69,12 @@ private:
 
   std::string str_i, str_f;
   std::ofstream handle, handle_csv;
-  ros::Subscriber velocity_sub, grid_sub, laplacian_sub;
+  ros::Subscriber velocity_sub, grid_sub, laplacian_sub, grad_sub, sobel_sub, prewitt_sub, kirsh_sub, canny_sub;
   ros::Publisher gps_pub, gt_pub, cleangrid_pub, img_pub_result;
 
   // to read kml
   std::vector<string> coordinates_right, coordinates_left;
-  std::vector<double> lat_right, lat_left, lon_right, lon_left, gt_dx_meters, gt_dy_meters;
+  std::vector<double> lat_right, lat_left, lon_right, lon_left, gt_dx_meters, gt_dy_meters, gt_dx_meters_int, gt_dy_meters_int;
   std::vector<int8_t> gt_points, cleaned_edges;
   std::string zone;
 
@@ -101,7 +101,6 @@ private:
   double interpolate(vector<double> &xData, vector<double> &yData, double x, bool extrapolate);
   void StatisticMeasures();
   void CleanLimits();
-  void Correlation();
 };
 
 /**********************************************************/
@@ -110,7 +109,13 @@ QuantEval::QuantEval() : str_i({"<coordinates>"}), str_f({"</coordinates>"}), GT
 {
   velocity_sub = nh.subscribe("inspva", 10, &QuantEval::getVelocity, this);
   grid_sub = nh.subscribe("density_pub", 10, &QuantEval::getDensityGrid, this);
-  laplacian_sub = nh.subscribe("laplacian_pub", 10, &QuantEval::getEdgeGrid, this);
+  // laplacian_sub = nh.subscribe("laplacian_pub", 10, &QuantEval::getEdgeGrid, this);
+
+  // grad_sub = nh.subscribe("grad_pub", 10, &QuantEval::getEdgeGrid, this);
+  // sobel_sub = nh.subscribe("sobel_pub",10, &QuantEval::getEdgeGrid, this);
+  // prewitt_sub = nh.subscribe("prewitt_pub", 10, &QuantEval::getEdgeGrid, this);
+  // kirsh_sub = nh.subscribe("kirsh_pub", 10, &QuantEval::getEdgeGrid, this);
+  canny_sub = nh.subscribe("canny_pub", 10, &QuantEval::getEdgeGrid, this);
 
   gps_pub = nh.advertise<gps_common::GPSFix>("gps_pub", 1, true);
   gt_pub = nh.advertise<nav_msgs::OccupancyGrid>("gt_pub", 1, true);
@@ -186,8 +191,6 @@ void QuantEval::LoopFunction()
     if (gt_coincident != 0)
       StatisticMeasures();
     // std::cout << "7" << std::endl;
-
-    Correlation();
   }
 }
 /************************************************************/
@@ -234,6 +237,10 @@ std::vector<string> QuantEval::ReadKml(string path)
 
 void QuantEval::ConvertToCoordinates()
 {
+  lon_right.clear();
+  lat_right.clear();
+  lon_left.clear();
+  lat_left.clear();
   coordinates_right = ReadKml("/home/daniela/catkin_ws/src/road_detection/Kml_files/RightPathAhead.kml");
   /*separate in latitude and longitude*/
   int n_coord = 1;
@@ -272,6 +279,7 @@ void QuantEval::ConvertToCoordinates()
     }
     n_coord++;
   }
+  std::cout << "separated latitude and longitude" << std::endl;
 }
 
 void QuantEval::DistanceToCar()
@@ -310,7 +318,7 @@ void QuantEval::DistanceToCar()
   for (int i = 0; i < coordinates_left.size() + coordinates_right.size(); i++)
   {
     // std::cout << "Dx: " << gt_dx_meters[i] << " and dy is: " << gt_dy_meters[i] << std::endl;
-    for (int n = 1; n < (int)floor((gt_dx_meters[i + 1] - gt_dx_meters[i]) / pace); n++)
+    for (int n = 1; n < (int)floor((gt_dx_meters[i + 1] - gt_dx_meters[i]) / (pace * 0.5)); n++)
     {
       std::vector<double> xData = {gt_dx_meters[i], gt_dx_meters[i + 1]};
       std::vector<double> yData = {gt_dy_meters[i], gt_dy_meters[i + 1]};
@@ -331,7 +339,24 @@ void QuantEval::DistanceToCar()
 
       if (lin + col * nl < N && lin < nl && col < nc)
       {
-        gt_points[lin + col * nl] = 100;
+        // gt_points[lin + col * nl] = 100;
+        int idx = col;
+        if (gt_dy_meters[i] > 0)
+        {
+          while (idx > nc / 2)
+          {
+            gt_points[lin + idx * nl] = 100;
+            idx--;
+          }
+        }
+        else if (gt_dy_meters[i] < 0)
+        {
+          while (idx <= nc / 2)
+          {
+            gt_points[lin + idx * nl] = 100;
+            idx++;
+          }
+        }
       }
       gt_coincident++;
     }
@@ -348,8 +373,9 @@ void QuantEval::CleanLimits()
 {
   cleaned_edges.clear();
   cleaned_edges.resize(N);
+  std::fill(cleaned_edges.begin(), cleaned_edges.end(), 0);
 
-  for (int i = 0; i < nl; i++)
+  for (int i = 0; i < nl; i++) // i é o nr de linhas e idx é o nr de colunas
   {
     int stop = 0;
     int idx = nc / 2;
@@ -357,7 +383,11 @@ void QuantEval::CleanLimits()
     {
       if (matToClean(i, idx) != 0)
       {
-        cleaned_edges[i + idx * nl] = 100;
+        while (idx > nc / 2)
+        {
+          cleaned_edges[i + idx * nl] = 100;
+          idx--;
+        }
         stop = 1;
       }
       idx++;
@@ -368,7 +398,11 @@ void QuantEval::CleanLimits()
     {
       if (matToClean(i, idx) != 0)
       {
-        cleaned_edges[i + idx * nl] = 100;
+        while (idx <= nc / 2)
+        {
+          cleaned_edges[i + idx * nl] = 100;
+          idx++;
+        }
         stop = 1;
       }
       idx--;
@@ -383,15 +417,14 @@ void QuantEval::CleanLimits()
 void QuantEval::StatisticMeasures()
 {
   int TP, FP, TN, FN, beta;
-  double PPV, TNR, NPV, TPR, FPace;
+  double PPV, TNR, NPV, TPR, FPace, Accuracy;
   TP = FP = TN = FN = PPV = TNR = NPV = TPR = FPace = 0;
   beta = 1;
 
   if (handle_csv.is_open())
   {
-    for (int i = 0; i < gt_points.size() - 1; i++)
+    for (int i = 0; i < gt_points.size() / 2 - 1; i++)
     {
-      std::cout << "GT: " << (int)gt_points[i] << " ; limits: " << (int)(cleaned_edges[i]) << std::endl;
       if ((int)gt_points[i] == (int)cleaned_edges[i] && (int)gt_points[i] == 0) // true negative
       {
         TN++;
@@ -425,8 +458,9 @@ void QuantEval::StatisticMeasures()
       NPV = 0;
       break;
     default:
-      TNR = static_cast<double>(TN) / static_cast<double>(FP + TN); // sensitivity
+      TNR = static_cast<double>(TN) / static_cast<double>(FP + TN); //specificity
       NPV = static_cast<double>(TN) / static_cast<double>(TN + FN);
+      Accuracy = static_cast<double>(TN + TP) / static_cast<double>(TP + TN + FP + FN);
     }
 
     switch (TP)
@@ -437,40 +471,12 @@ void QuantEval::StatisticMeasures()
       break;
     default:
       PPV = static_cast<double>(TP) / static_cast<double>(TP + FP);
-      TPR = static_cast<double>(TP) / static_cast<double>(TP + FN);
-      FPace=(1+beta*beta)*(PPV*TPR)/(beta*beta*(PPV+TPR));
+      TPR = static_cast<double>(TP) / static_cast<double>(TP + FN); // sensitivity
+      FPace = (1 + beta * beta) * (PPV * TPR) / (beta * beta * (PPV + TPR));
     }
 
-    handle_csv << PPV << "," << TNR << "," << NPV << "," << TPR << "," << FPace <<  "\n";
+    handle_csv << PPV << "," << TNR << "," << NPV << "," << TPR << "," << FPace << "," << Accuracy << "\n";
   }
-}
-
-void QuantEval::Correlation()
-{
-
-  /*convert ground truth*/
-  grid_map::GridMapRosConverter::fromOccupancyGrid(GTGrid, "groundtruth", GTGridMap);
-  grid_map::GridMapCvConverter::toImage<unsigned char, 1>(GTGridMap, "groundtruth", CV_8UC1, gt_img);
-  /*convert cleaned limits*/
-  grid_map::GridMapRosConverter::fromOccupancyGrid(EdgeGrid, "edge_detection", EdgeGridMap);
-  grid_map::GridMapCvConverter::toImage<unsigned char, 1>(EdgeGridMap, "edge_detection", CV_8UC1, edge_img);
-  /// Do the Matching and Normalize
-  cv::matchTemplate(edge_img, gt_img, result, CV_TM_CCORR);
-  cv::normalize(result, result, 0, 1, cv::NORM_MINMAX, -1, cv::Mat());
-
-  /// Localizing the best match with minMaxLoc
-  // double minVal;
-  // double maxVal;
-  // Point minLoc;
-  // Point maxLoc;
-  // Point matchLoc;
-
-  // minMaxLoc(result, &minVal, &maxVal, &minLoc, &maxLoc, Mat());
-
-  msg_result = cv_bridge::CvImage{header, "mono8", result}.toImageMsg();
-  // grid_map::GridMapRosConverter::initializeFromImage(*msg_result, pace, cannyGridMap);
-  // grid_map::GridMapRosConverter::addLayerFromImage(*msg_result, "canny", cannyGridMap, 0, 255, 0.5);
-  img_pub_result.publish(msg_result);
 }
 
 /**
@@ -516,6 +522,8 @@ void QuantEval::StartHandle()
 
   /*KML file with car path*/
   sprintf(filename, "/home/daniela/catkin_ws/src/road_detection/eval_api/Results/Path_%dH_%dM.kml", hour, min);
+  // sprintf(filename, "/home/daniela/catkin_ws/src/road_detection/eval_api/Results/Gradiente_salinas_120_0-4.kml", hour, min);
+
   // Open the KML file for writing:
   handle.open(filename);
   // Write to the KML file:
@@ -529,11 +537,11 @@ void QuantEval::StartHandle()
   handle << "<coordinates>";
 
   /*CSV file with statistical measures*/
-  sprintf(filename_csv, "/home/daniela/catkin_ws/src/road_detection/eval_api/Results/CSV/Measures%dH_%dM.csv", hour,
+  sprintf(filename_csv, "/home/daniela/catkin_ws/src/road_detection/eval_api/Results/CSV/canny_ua_2_%dH_%dM.csv", hour,
           min);
   // Open the KML file for writing:
   handle_csv.open(filename_csv);
-  handle_csv << "PPV,TNR,NPV,TPR,F-Pace\n";
+  handle_csv << "PPV,TNR,NPV,TPR,F-Pace,Accuracy\n";
 }
 
 std::string QuantEval::FormatPlacemark(double lat1, double lon1)
